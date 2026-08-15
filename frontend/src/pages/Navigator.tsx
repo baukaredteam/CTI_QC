@@ -1,0 +1,374 @@
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useAppStore } from '@/store';
+import { aptApi, attackApi, exportApi, simulationApi } from '@/api/client';
+import { useAttackMatrix } from '@/hooks/useAttackMatrix';
+import { AttackMatrix } from '@/components/Navigator/AttackMatrix';
+import { LayerControls } from '@/components/Navigator/LayerControls';
+import { LayerImport } from '@/components/Navigator/LayerImport';
+import { SaveLayerModal } from '@/components/Navigator/SaveLayerModal';
+import { LoadLayerModal } from '@/components/Navigator/LoadLayerModal';
+import { TechniquePanel } from '@/components/Navigator/TechniquePanel';
+import { MatrixFilters } from '@/components/Navigator/MatrixFilters';
+import { RAGAssistant } from '@/components/Navigator/RAGAssistant';
+import { Header } from '@/components/Layout/Header';
+import type { TechniqueListItem } from '@/types/attack';
+import { useSearchParams } from 'react-router-dom';
+import { useHasPermission } from '@/hooks/useCurrentUser';
+
+export function Navigator() {
+  const canExport = useHasPermission('export_data');
+  const canRunSimulation = useHasPermission('run_attack_simulation');
+  const {
+    domain, version,
+    selectedTechniques, overlayTechniques,
+    comparisonLayers,
+    overlayGroupId, overlayGroupName,
+    expandedTechniques,
+    toggleTechnique, toggleExpanded,
+    addTechniques, replaceTechniques, clearTechniques, clearOverlay,
+    setOverlayTechniques, expandAll, collapseAll, coverageTechniques, setCoverageTechniques, clearCoverage,
+    addComparisonLayer, removeComparisonLayer, clearComparisonLayers,
+    setRagPreview,
+  } = useAppStore();
+
+  // ── Panel state ────────────────────────────────────────────────────────────
+  const [selectedAttackId, setSelectedAttackId] = useState<string | null>(null);
+  const [importOpen, setImportOpen]             = useState(false);
+  const [importTarget, setImportTarget]         = useState<'selected' | 'overlay'>('selected');
+  const [saveOpen,   setSaveOpen]               = useState(false);
+  const [loadOpen,   setLoadOpen]               = useState(false);
+  const [loadTarget, setLoadTarget]             = useState<'selected' | 'overlay'>('selected');
+  const [coverageImportOpen, setCoverageImportOpen] = useState(false);
+  const [params] = useSearchParams();
+  useEffect(() => { const id = params.get('technique'); if (id) setSelectedAttackId(id); }, [params]);
+
+  // ── Filter state ───────────────────────────────────────────────────────────
+  const [search, setSearch]                       = useState('');
+  const [platform, setPlatform]                   = useState('');
+  const [showOnlySelected, setShowOnlySelected]   = useState(false);
+  const [showOnlyOverlay,  setShowOnlyOverlay]     = useState(false);
+
+  // ── Matrix data ────────────────────────────────────────────────────────────
+  const matrixData = useAttackMatrix(domain, version);
+  const { tactics, techniquesByTactic, subtechsByParent, parentsWithSubs, isLoading, hasData } = matrixData;
+  const { data: attackVersions = [] } = useQuery({
+    queryKey: ['attack-versions'],
+    queryFn: attackApi.versions,
+    staleTime: 10 * 60 * 1000,
+  });
+  const activeAttackVersion = useMemo(
+    () => version ?? attackVersions.find(item => item.domain === domain && item.is_latest)?.version ?? null,
+    [attackVersions, domain, version],
+  );
+
+  // ── Group-profile overlay sync ─────────────────────────────────────────────
+  const { data: overlayGroup } = useQuery({
+    queryKey: ['overlay-group', overlayGroupId, domain, version],
+    queryFn: () => aptApi.group(overlayGroupId!, domain, version ?? undefined),
+    enabled: !!overlayGroupId,
+    staleTime: 10 * 60 * 1000,
+  });
+  const { data: simulationCatalog = [] } = useQuery({
+    queryKey: ['simulation-catalog'],
+    queryFn: simulationApi.catalog,
+    enabled: canRunSimulation,
+    staleTime: 5 * 60 * 1000,
+  });
+  const simulationTechniqueIds = useMemo(
+    () => new Set(simulationCatalog.map(item => item.technique_id)),
+    [simulationCatalog],
+  );
+
+  useEffect(() => {
+    if (overlayGroup) setOverlayTechniques(overlayGroup.techniques.map(t => t.attack_id));
+  }, [overlayGroup, setOverlayTechniques]);
+
+  // ── Derived platform list ──────────────────────────────────────────────────
+  const availablePlatforms = useMemo(() => {
+    const all = new Set<string>();
+    for (const techs of techniquesByTactic.values())
+      techs.forEach(t => t.platforms.forEach(p => all.add(p)));
+    return Array.from(all).sort();
+  }, [techniquesByTactic]);
+
+  // ── Filtered matrix ────────────────────────────────────────────────────────
+  const filteredByTactic = useMemo(() => {
+    const term = search.toLowerCase();
+    if (!term && !platform && !showOnlySelected && !showOnlyOverlay) return techniquesByTactic;
+
+    const result = new Map<string, TechniqueListItem[]>();
+    for (const [tactic, techs] of techniquesByTactic) {
+      let filtered = techs;
+      if (term)             filtered = filtered.filter(t => t.name.toLowerCase().includes(term) || t.attack_id.toLowerCase().includes(term));
+      if (platform)         filtered = filtered.filter(t => t.platforms.includes(platform));
+      if (showOnlySelected) filtered = filtered.filter(t => selectedTechniques.has(t.attack_id));
+      if (showOnlyOverlay) {
+        const compareIds = new Set([...overlayTechniques, ...comparisonLayers.flatMap(layer => layer.techniqueIds)]);
+        filtered = filtered.filter(t => compareIds.has(t.attack_id));
+      }
+      result.set(tactic, filtered);
+    }
+    return result;
+  }, [techniquesByTactic, search, platform, showOnlySelected, showOnlyOverlay, selectedTechniques, overlayTechniques, comparisonLayers]);
+
+  // Simplified: toggle + open panel together (detail panel on click)
+  const handleToggle = useCallback(
+    (id: string) => {
+      toggleTechnique(id);
+      setSelectedAttackId(id);
+    },
+    [toggleTechnique]
+  );
+
+  // ── Expand all ────────────────────────────────────────────────────────────
+  const handleExpandAll = useCallback(() => expandAll(Array.from(parentsWithSubs)), [expandAll, parentsWithSubs]);
+
+  // ── Exports ───────────────────────────────────────────────────────────────
+  const exportNavigatorLayer = useCallback(() => {
+    downloadJson(buildNavigatorLayer(selectedTechniques, overlayTechniques, domain), 'adversarygraph-layer.json');
+  }, [selectedTechniques, overlayTechniques, domain]);
+
+  const exportJson = useCallback(() => {
+    downloadJson({ techniques: Array.from(selectedTechniques).sort(), domain }, 'my-ttps.json');
+  }, [selectedTechniques, domain]);
+
+  const exportLayerPdf = useCallback(async () => {
+    const blob = await exportApi.layer(Array.from(selectedTechniques), domain);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'layer-report.pdf'; a.click();
+    URL.revokeObjectURL(url);
+  }, [selectedTechniques, domain]);
+
+  return (
+    <div className="flex flex-col h-full">
+      <Header title="ATT&CK Navigator" />
+
+      <LayerControls
+        matrixData={matrixData}
+        selectedTechniques={selectedTechniques}
+        overlayTechniques={overlayTechniques}
+        comparisonLayers={comparisonLayers}
+        expandedTechniques={expandedTechniques}
+        overlayGroupName={overlayGroupName}
+        onExpandAll={handleExpandAll}
+        onCollapseAll={collapseAll}
+        onClearTechniques={clearTechniques}
+        onClearOverlay={() => { clearOverlay(); clearComparisonLayers(); }}
+        onRemoveComparisonLayer={removeComparisonLayer}
+        onExportLayer={exportJson}
+        onExportNavigator={exportNavigatorLayer}
+        onExportPdf={exportLayerPdf}
+        onImportClick={() => { setImportTarget('selected'); setImportOpen(true); }}
+        onImportOverlayClick={() => { setImportTarget('overlay'); setImportOpen(true); }}
+        onSaveClick={() => setSaveOpen(true)}
+        onLoadClick={() => { setLoadTarget('selected'); setLoadOpen(true); }}
+        onLoadOverlayClick={() => { setLoadTarget('overlay'); setLoadOpen(true); }}
+      />
+
+      <MatrixFilters
+        search={search}            onSearchChange={setSearch}
+        platform={platform}        onPlatformChange={setPlatform}
+        availablePlatforms={availablePlatforms}
+        showOnlySelected={showOnlySelected}  onToggleSelected={() => setShowOnlySelected(v => !v)}
+        showOnlyOverlay={showOnlyOverlay}    onToggleOverlay={() => setShowOnlyOverlay(v => !v)}
+        hasOverlay={overlayTechniques.size > 0 || comparisonLayers.length > 0}
+      />
+      <div className="flex items-center gap-2 px-4 py-1.5 border-b border-gray-800 bg-gray-900 text-[10px]">
+        <button onClick={() => setCoverageImportOpen(true)} className="border border-green-800 text-green-400 px-2 py-1 rounded">Import coverage</button>
+        {coverageTechniques.size > 0 && <>
+          <span className="text-green-500">{coverageTechniques.size} covered</span>
+          {canExport && <button onClick={() => exportBacklog(selectedTechniques, overlayTechniques, coverageTechniques)} className="border border-amber-800 text-amber-400 px-2 py-1 rounded">Export detection backlog</button>}
+          <button onClick={clearCoverage} className="text-gray-600">Clear coverage</button>
+        </>}
+        <div className="ml-auto">
+          <RAGAssistant
+            domain={domain}
+            attackVersion={activeAttackVersion}
+            selectedTechniques={selectedTechniques}
+            onPreview={setRagPreview}
+            onApply={(ids, mode) => {
+              if (mode === 'replace') replaceTechniques(ids);
+              else addTechniques(ids);
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Main workspace row */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Matrix */}
+        <div className="flex-1 overflow-hidden relative">
+          {isLoading && <LoadingOverlay />}
+
+          {!isLoading && !hasData && <EmptyState />}
+
+          {!isLoading && hasData && (
+            <AttackMatrix
+              tactics={tactics}
+              techniquesByTactic={filteredByTactic}
+              subtechsByParent={subtechsByParent}
+              parentsWithSubs={parentsWithSubs}
+              selectedTechniques={selectedTechniques}
+              overlayTechniques={overlayTechniques}
+              comparisonLayers={comparisonLayers}
+              coverageTechniques={coverageTechniques}
+              simulationTechniques={simulationTechniqueIds}
+              expandedTechniques={expandedTechniques}
+              onToggleTechnique={handleToggle}
+              onToggleExpanded={toggleExpanded}
+            />
+          )}
+
+          {/* Overlay badge */}
+          {(overlayTechniques.size > 0 || comparisonLayers.length > 0) && (
+            <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-blue-900/80 border border-blue-600 text-blue-200 text-xs px-3 py-2 rounded-lg z-20">
+              <div className="w-2 h-2 rounded-sm bg-blue-500" />
+              Compare:
+              <span className="font-medium">
+                {[overlayGroupName, ...comparisonLayers.map(layer => layer.name)].filter(Boolean).join(', ') || 'Comparison layer'}
+              </span>
+              <span className="text-blue-400">({overlayTechniques.size + comparisonLayers.reduce((sum, layer) => sum + layer.techniqueIds.length, 0)})</span>
+              <button onClick={() => { clearOverlay(); clearComparisonLayers(); }} className="ml-1 text-blue-400 hover:text-white transition-colors">✕</button>
+            </div>
+          )}
+        </div>
+
+        {/* Technique detail panel */}
+        {selectedAttackId && (
+          <TechniquePanel
+            attackId={selectedAttackId}
+            onClose={() => setSelectedAttackId(null)}
+          />
+        )}
+      </div>
+
+      {/* Import modal */}
+      {importOpen && (
+        <LayerImport
+          title={importTarget === 'overlay' ? 'Import comparison layer' : 'Import Navigator Layer'}
+          actionLabel={importTarget === 'overlay' ? 'Load as compare' : 'Import'}
+          targetLabel={importTarget === 'overlay' ? 'the comparison overlay' : 'your TTP layer'}
+          onImport={(ids, name) => {
+            if (importTarget === 'overlay') {
+              addComparisonLayer({ name: name || 'Imported comparison layer', techniqueIds: ids, source: 'import' });
+            } else {
+              addTechniques(ids);
+            }
+          }}
+          onClose={() => setImportOpen(false)}
+        />
+      )}
+      {coverageImportOpen && (
+        <LayerImport
+          title="Import coverage layer"
+          actionLabel="Import coverage"
+          targetLabel="coverage"
+          onImport={ids => setCoverageTechniques(ids)}
+          onClose={() => setCoverageImportOpen(false)}
+        />
+      )}
+
+      {/* Save layer modal */}
+      {saveOpen && (
+        <SaveLayerModal
+          techniqueIds={Array.from(selectedTechniques)}
+          domain={domain}
+          onClose={() => setSaveOpen(false)}
+          onSaved={() => {}}
+        />
+      )}
+
+      {/* Load layer modal */}
+      {loadOpen && (
+        <LoadLayerModal
+          domain={domain}
+          onLoad={(ids, name) => {
+            if (loadTarget === 'overlay') {
+              addComparisonLayer({ name: name || 'Saved comparison layer', techniqueIds: ids, source: 'saved-layer' });
+            } else {
+              replaceTechniques(ids);
+            }
+          }}
+          onClose={() => setLoadOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function LoadingOverlay() {
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 z-10">
+      <div className="text-3xl mb-3 animate-pulse">⬡</div>
+      <p className="text-sm">Loading ATT&CK matrix…</p>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center text-center text-gray-500">
+      <div className="text-5xl mb-4">⬡</div>
+      <p className="text-lg text-gray-400">No ATT&CK data yet</p>
+      <p className="text-sm mt-2 max-w-sm text-gray-600">
+        The API downloads and ingests ATT&CK data on first startup. This can take a few minutes.
+        Once complete, refresh this page.
+      </p>
+    </div>
+  );
+}
+
+function buildNavigatorLayer(
+  selectedTechniques: Set<string>,
+  overlayTechniques: Set<string>,
+  domain: string
+) {
+  const userIds = Array.from(selectedTechniques);
+  return {
+    name: 'AdversaryGraph Export',
+    versions: { attack: '19', navigator: '5.0', layer: '4.5' },
+    domain,
+    description: `Exported from AdversaryGraph. User TTPs: ${userIds.length}`,
+    techniques: [
+      ...userIds.map(id => ({
+        techniqueID: id,
+        color: overlayTechniques.has(id) ? '#f59e0b' : '#e94560',
+        comment: overlayTechniques.has(id) ? 'Shared with overlay' : 'My TTP',
+        enabled: true, score: 1, showSubtechniques: false,
+      })),
+      ...[...overlayTechniques].filter(id => !selectedTechniques.has(id)).map(id => ({
+        techniqueID: id,
+        color: '#3b82f6', comment: 'Overlay only',
+        enabled: true, score: 1, showSubtechniques: false,
+      })),
+    ],
+    gradient: { colors: ['#ffffff', '#e94560'], minValue: 0, maxValue: 1 },
+    legendItems: [
+      { color: '#e94560', label: 'My TTP' },
+      { color: '#3b82f6', label: 'Group-profile overlay' },
+      { color: '#f59e0b', label: 'Shared' },
+    ],
+    metadata: [],
+    hideDisabled: false,
+    layout: { layout: 'side', aggregateFunction: 'average', showID: true, showName: true },
+  };
+}
+
+function downloadJson(data: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportBacklog(selected: Set<string>, overlay: Set<string>, coverage: Set<string>) {
+  const target = overlay.size ? overlay : selected;
+  const backlog = [...target].filter(id => !coverage.has(id)).sort();
+  const text = ['AdversaryGraph Detection Backlog', `Generated: ${new Date().toISOString()}`, `Target techniques: ${target.size}`, `Covered: ${[...target].filter(id => coverage.has(id)).length}`, '', ...backlog.map(id => `- ${id}`)].join('\n');
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain' })); const anchor = document.createElement('a'); anchor.href = url; anchor.download = 'adversarygraph-detection-backlog.txt'; anchor.click(); URL.revokeObjectURL(url);
+}

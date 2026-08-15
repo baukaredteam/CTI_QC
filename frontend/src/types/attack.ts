@@ -1,0 +1,156 @@
+export interface AttackVersion {
+  domain: string;
+  version: string;
+  is_latest: boolean;
+}
+
+export interface Tactic {
+  attack_id: string;     // TA0001
+  name: string;
+  shortname: string;     // initial-access
+  description: string;
+  url: string;
+  domain: string;
+  technique_count: number;
+}
+
+export interface TechniqueListItem {
+  attack_id: string;     // T1566 | T1566.001
+  name: string;
+  is_subtechnique: boolean;
+  parent_attack_id: string | null;
+  tactics: string[];     // shortnames
+  platforms: string[];
+  domain: string;
+}
+
+export interface TechniqueDetail extends TechniqueListItem {
+  stix_id: string;
+  description: string;
+  url: string;
+  data_sources: string[];
+  detection: string;
+  telemetry_readiness: TelemetryReadiness;
+}
+
+export interface TelemetryReadiness {
+  required_data_components: string[];
+  available_logs: string[];
+  missing_telemetry: string[];
+  detection_feasibility: 'High' | 'Medium' | 'Low' | string;
+  readiness_score: number;
+  gaps: string[];
+}
+
+export interface GroupListItem {
+  attack_id: string;     // G0001
+  name: string;
+  aliases: string[];
+  description: string;
+  modified: string;
+  domain: string;
+  technique_count: number;
+}
+
+export interface TechniqueUsage {
+  attack_id: string;
+  name: string;
+  tactics: string[];
+  platforms: string[];
+  is_subtechnique: boolean;
+  use_description: string;
+  references: Array<{ source_name: string; url?: string; description?: string }>;
+}
+
+export interface GroupDetail extends GroupListItem {
+  stix_id: string;
+  url: string;
+  created: string;
+  attack_version: string;
+  contributors: string[];
+  external_references: Array<{ source_name: string; url: string; description: string }>;
+  campaign_count: number;
+  tactic_counts: Array<{ name: string; count: number }>;
+  platform_counts: Array<{ name: string; count: number }>;
+  source_names: string[];
+  techniques: TechniqueUsage[];
+}
+
+export interface CompareResult {
+  group_attack_id: string;
+  group_name: string;
+  similarity: number;
+  shared_count: number;
+  shared_techniques: string[];
+}
+
+export interface OverlapExplanationRequest {
+  subject_a: { name: string; type: 'report' | 'actor' | 'campaign' | 'layer' };
+  subject_b: { name: string; type: 'report' | 'actor' | 'campaign' | 'layer' };
+  shared_techniques: string[];
+  unique_to_a: string[];
+  unique_to_b: string[];
+  tactic_distribution: Record<string, { subject_a: number; subject_b: number; shared: number }>;
+  overlap_score: number;
+}
+
+// ── DB 1: MITRE Campaigns ─────────────────────────────────────────────────────
+
+export interface CampaignListItem {
+  attack_id: string;       // C0023
+  name: string;
+  description: string;
+  url: string;
+  first_seen: string | null;
+  last_seen: string | null;
+  domain: string;
+  technique_count: number;
+  group_names: string[];
+}
+
+export interface CampaignTechniqueUsage {
+  attack_id: string;
+  name: string;
+  tactics: string[];
+  platforms: string[];
+  is_subtechnique: boolean;
+  use_description: string;
+}
+
+export interface CampaignDetail extends CampaignListItem {
+  techniques: CampaignTechniqueUsage[];
+}
+
+export interface CampaignResult {
+  campaign_attack_id: string;
+  campaign_name: string;
+  group_names: string[];
+  first_seen: string | null;
+  last_seen: string | null;
+  similarity: number;
+  shared_count: number;
+  shared_techniques: string[];
+}
+
+// ── DB 2: User report sessions ────────────────────────────────────────────────
+
+export interface ReportSession {
+  session_id: string;
+  name: string | null;
+  status: string;
+  provider: string;
+  model: string;
+  domain: string;
+  filename: string | null;
+  created_at: string;
+  technique_count: number;
+}
+
+export type Domain = 'enterprise-attack' | 'mobile-attack' | 'ics-attack' | 'atlas';
+
+export const DOMAIN_LABELS: Record<Domain, string> = {
+  'enterprise-attack': 'Enterprise',
+  'mobile-attack': 'Mobile',
+  'ics-attack': 'ICS',
+  'atlas': 'ATLAS',
+};

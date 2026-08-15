@@ -1,0 +1,585 @@
+# ============================================================
+# fields.yaml — Кастомные поля QRadar
+# Основано на реальных логах клиента energy_kz_001
+# ============================================================
+
+metadata:
+  description: "Custom fields for QRadar — energy_kz_001 (на основе реальных логов)"
+  client_id: "energy_kz_001"
+  siem: "QRadar 7.5"
+  last_updated: "2026-07-12"
+  total_fields: 42
+
+custom_fields:
+
+  # ==========================================================
+  # MICROSOFT-WINDOWS-SECURITY-MITIGATIONS (EventID 1, 3, 4, 10, 11, 12, 36)
+  # ==========================================================
+
+  - name: "proc_cmdline"
+    internal_name: "proc_cmdline"
+    display_name: "Process Command Line"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Mitigations"]
+    availability: "full"          # ✅ Есть в логах!
+    adversary_control: "HIGH"
+    used_in_events: ["1", "3", "4", "10", "11", "12", "36"]
+    notes: "Полная командная строка процесса. Источник: ProcessCommandLine"
+
+  - name: "proc_file_path"
+    internal_name: "proc_file_path"
+    display_name: "Process File Path"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Mitigations"]
+    availability: "partial"       # ⚠ В логе есть (ProcessPath), но в QRadar N/A
+    adversary_control: "HIGH"
+    used_in_events: ["1", "3", "4", "10", "11", "12", "36"]
+    notes: "⚠ В QRadar парсится как N/A. Требуется настройка парсера."
+
+  - name: "proc_id"
+    internal_name: "proc_id"
+    display_name: "Process ID"
+    data_type: "integer"
+    log_sources: ["Microsoft-Windows-Security-Mitigations"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["1", "3", "4", "10", "11", "12", "36"]
+    notes: "PID процесса (CallingProcessId или ProcessId)"
+
+  - name: "proc_thread_id"
+    internal_name: "proc_thread_id"
+    display_name: "Process Thread ID"
+    data_type: "integer"
+    log_sources: ["Microsoft-Windows-Security-Mitigations"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["1", "3", "4", "10", "11", "12", "36"]
+    notes: "ID потока (CallingThreadId или TargetThreadId)"
+
+  - name: "proc_usr_sid"
+    internal_name: "proc_usr_sid"
+    display_name: "Process User SID"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Mitigations"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["1", "3", "4", "10", "11", "12", "36"]
+    notes: "SID пользователя (UserID)"
+
+  - name: "event_description"
+    internal_name: "event_description"
+    display_name: "Event Description"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Mitigations"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["1", "3", "4", "10", "11", "12", "36"]
+    notes: "Полное описание события из Message"
+
+  - name: "orig_message"
+    internal_name: "orig_message"
+    display_name: "Original Message"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Mitigations"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["1", "3", "4", "10", "11", "12", "36"]
+    notes: "Исходное сообщение (дублирует event_description)"
+
+  - name: "child_cmdline"
+    internal_name: "child_cmdline"
+    display_name: "Child Process Command Line"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Mitigations"]
+    availability: "full"
+    adversary_control: "HIGH"
+    used_in_events: ["3", "4"]
+    notes: "Командная строка дочернего процесса (ChildCommandLine)"
+
+  - name: "child_proc_path"
+    internal_name: "child_proc_path"
+    display_name: "Child Process Path"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Mitigations"]
+    availability: "full"
+    adversary_control: "HIGH"
+    used_in_events: ["3", "4"]
+    notes: "Путь к дочернему процессу (ChildImagePathName)"
+
+  - name: "image_name"
+    internal_name: "image_name"
+    display_name: "Image Name"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Mitigations"]
+    availability: "full"
+    adversary_control: "HIGH"
+    used_in_events: ["11", "12"]
+    notes: "Имя загружаемого бинарника (ImageName) — для Code Integrity Guard"
+
+  # ==========================================================
+  # MICROSOFT-WINDOWS-BITS-CLIENT (EventID 3, 59, 60)
+  # ==========================================================
+
+  - name: "url_full"
+    internal_name: "url_full"
+    display_name: "URL"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Bits-Client"]
+    availability: "full"
+    adversary_control: "HIGH"
+    used_in_events: ["59", "60"]
+    notes: "URL для BITS transfer. Источник: url"
+
+  - name: "task_id"
+    internal_name: "task_id"
+    display_name: "Task ID"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Bits-Client"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["59", "60"]
+    notes: "ID задачи BITS (Id)"
+
+  - name: "task_name"
+    internal_name: "task_name"
+    display_name: "Task Name"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Bits-Client"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["59", "60"]
+    notes: "Имя задачи BITS (name или jobTitle)"
+
+  - name: "file_size"
+    internal_name: "file_size"
+    display_name: "File Size"
+    data_type: "integer"
+    log_sources: ["Microsoft-Windows-Bits-Client"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["59", "60"]
+    notes: "Размер файла в байтах (fileLength или bytesTotal)"
+
+  - name: "net_bytes_sent"
+    internal_name: "net_bytes_sent"
+    display_name: "Bytes Sent"
+    data_type: "integer"
+    log_sources: ["Microsoft-Windows-Bits-Client"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["60"]
+    notes: "Передано байт (bytesTransferred)"
+
+  # ==========================================================
+  # MICROSOFT-WINDOWS-POWERSHELL (EventID 400, 800, 4104)
+  # ==========================================================
+
+  - name: "script_text"
+    internal_name: "script_text"
+    display_name: "Script Text"
+    data_type: "string"
+    log_sources: ["PowerShell"]
+    availability: "full"
+    adversary_control: "HIGH"
+    used_in_events: ["800", "4104"]
+    notes: "Текст PowerShell скрипта. Источник: ScriptBlockText или ScriptText"
+
+  - name: "cmdline"
+    internal_name: "cmdline"
+    display_name: "Command Line"
+    data_type: "string"
+    log_sources: ["PowerShell"]
+    availability: "full"
+    adversary_control: "HIGH"
+    used_in_events: ["400", "800", "4104"]
+    notes: "Командная строка из лога PowerShell"
+
+  - name: "script_file_path"
+    internal_name: "script_file_path"
+    display_name: "Script File Path"
+    data_type: "string"
+    log_sources: ["PowerShell"]
+    availability: "full"
+    adversary_control: "HIGH"
+    used_in_events: ["800"]
+    notes: "Путь к исполняемому скрипту (ScriptName из лога 800)"
+
+  - name: "proc_usr_fullname"
+    internal_name: "proc_usr_fullname"
+    display_name: "Process User Full Name"
+    data_type: "string"
+    log_sources: ["PowerShell"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["800"]
+    notes: "Полное имя пользователя (Domain\\Username) из лога 800"
+
+  # ==========================================================
+  # MICROSOFT-WINDOWS-SECURITY-AUDITING (EventID 4611, 4624, 4625, 4627, 4648, 4662, 4672, 4688, 4698, 4699, 4701, 4702)
+  # ==========================================================
+
+  - name: "logon_type"
+    internal_name: "logon_type"
+    display_name: "Logon Type"
+    data_type: "integer"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4624", "4625", "4627"]
+    notes: "Тип входа: 2=Interactive, 3=Network, 10=RemoteInteractive"
+
+  - name: "usr_tgt_name"
+    internal_name: "usr_tgt_name"
+    display_name: "Target Username"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4624", "4625", "4627", "4648", "4688"]
+    notes: "Целевое имя пользователя (TargetUserName)"
+
+  - name: "usr_tgt_domain"
+    internal_name: "usr_tgt_domain"
+    display_name: "Target Domain"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4624", "4625", "4627", "4648"]
+    notes: "Домен целевого пользователя (TargetDomainName)"
+
+  - name: "usr_tgt_sid"
+    internal_name: "usr_tgt_sid"
+    display_name: "Target User SID"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4624", "4625", "4627", "4662"]
+    notes: "SID целевого пользователя (TargetUserSid)"
+
+  - name: "usr_tgt_logon_id"
+    internal_name: "usr_tgt_logon_id"
+    display_name: "Target Logon ID"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4624", "4625", "4627", "4648"]
+    notes: "Logon ID целевого пользователя (TargetLogonId)"
+
+  - name: "proc_usr_name"
+    internal_name: "proc_usr_name"
+    display_name: "Process Username"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4611", "4672", "4688", "4698", "4699", "4701", "4702"]
+    notes: "Имя пользователя, инициировавшего процесс (SubjectUserName)"
+
+  - name: "proc_usr_domain"
+    internal_name: "proc_usr_domain"
+    display_name: "Process User Domain"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4611", "4672", "4688", "4698", "4699", "4701", "4702"]
+    notes: "Домен пользователя, инициировавшего процесс (SubjectDomainName)"
+
+  - name: "proc_usr_sid"
+    internal_name: "proc_usr_sid"
+    display_name: "Process User SID"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4611", "4672", "4688", "4698", "4699", "4701", "4702"]
+    notes: "SID пользователя, инициировавшего процесс (SubjectUserSid)"
+
+  - name: "proc_logon_id"
+    internal_name: "proc_logon_id"
+    display_name: "Process Logon ID"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4611", "4672", "4688", "4698", "4699", "4701", "4702"]
+    notes: "Logon ID процесса (SubjectLogonId)"
+
+  - name: "proc_file_path"
+    internal_name: "proc_file_path"
+    display_name: "Process File Path"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "HIGH"
+    used_in_events: ["4648", "4688"]
+    notes: "Путь к исполняемому файлу процесса (ProcessName или NewProcessName)"
+
+  - name: "proc_file_name"
+    internal_name: "proc_file_name"
+    display_name: "Process File Name"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "HIGH"
+    used_in_events: ["4688"]
+    notes: "Имя исполняемого файла процесса (proc_file_name)"
+
+  - name: "proc_p_file_path"
+    internal_name: "proc_p_file_path"
+    display_name: "Parent Process File Path"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4688"]
+    notes: "Путь к родительскому процессу (ParentProcessName)"
+
+  - name: "proc_p_file_name"
+    internal_name: "proc_p_file_name"
+    display_name: "Parent Process File Name"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4688"]
+    notes: "Имя родительского процесса (proc_p_file_name)"
+
+  - name: "proc_p_id"
+    internal_name: "proc_p_id"
+    display_name: "Parent Process ID"
+    data_type: "integer"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4688"]
+    notes: "PID родительского процесса (ParentProcessId)"
+
+  - name: "task_name"
+    internal_name: "task_name"
+    display_name: "Task Name"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4698", "4699", "4701", "4702"]
+    notes: "Имя задачи планировщика (TaskName)"
+
+  - name: "rule_id"
+    internal_name: "rule_id"
+    display_name: "Rule ID"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Windows Firewall With Advanced Security"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["2006", "2033"]
+    notes: "ID правила брандмауэра (RuleId)"
+
+  - name: "rule_name"
+    internal_name: "rule_name"
+    display_name: "Rule Name"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Windows Firewall With Advanced Security"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["2006"]
+    notes: "Имя правила брандмауэра (RuleName)"
+
+  - name: "net_src_ipv4"
+    internal_name: "net_src_ipv4"
+    display_name: "Source IPv4"
+    data_type: "ip"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4624", "4625"]
+    notes: "IP адрес источника (IpAddress)"
+
+  - name: "net_dst_port"
+    internal_name: "net_dst_port"
+    display_name: "Destination Port"
+    data_type: "integer"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4624", "4625"]
+    notes: "Порт назначения (IpPort)"
+
+  - name: "event_reason_code"
+    internal_name: "event_reason_code"
+    display_name: "Event Reason Code"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4625"]
+    notes: "Код ошибки входа (Status и SubStatus)"
+
+  - name: "usr_token_groups"
+    internal_name: "usr_token_groups"
+    display_name: "User Token Groups"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4627"]
+    notes: "Группы пользователя из токена (GroupMembership)"
+
+  - name: "proc_privs"
+    internal_name: "proc_privs"
+    display_name: "Process Privileges"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Security-Auditing"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["4672"]
+    notes: "Список привилегий (PrivilegeList)"
+
+  # ==========================================================
+  # MICROSOFT-WINDOWS-DNSSERVER (EventID 519)
+  # ==========================================================
+
+  - name: "dns_rname"
+    internal_name: "dns_rname"
+    display_name: "DNS Record Name"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-DNSServer"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["519"]
+    notes: "Имя DNS записи (NAME)"
+
+  - name: "dns_rdata"
+    internal_name: "dns_rdata"
+    display_name: "DNS RDATA"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-DNSServer"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["519"]
+    notes: "RDATA DNS записи"
+
+  # ==========================================================
+  # APPLICATION (EventID 1000, 1001)
+  # ==========================================================
+
+  - name: "proc_file_path"
+    internal_name: "proc_file_path"
+    display_name: "Process File Path"
+    data_type: "string"
+    log_sources: ["Application Error"]
+    availability: "full"
+    adversary_control: "HIGH"
+    used_in_events: ["1000"]
+    notes: "Путь к упавшему приложению (Faulting application path)"
+
+  - name: "event_description"
+    internal_name: "event_description"
+    display_name: "Event Description"
+    data_type: "string"
+    log_sources: ["Application Error"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["1000", "1001"]
+    notes: "Описание события из Message"
+
+  # ==========================================================
+  # MICROSOFT-WINDOWS-SECURITY-MITIGATIONS (EventID 2006, 2033 — Firewall)
+  # ==========================================================
+
+  - name: "modifying_app"
+    internal_name: "modifying_app"
+    display_name: "Modifying Application"
+    data_type: "string"
+    log_sources: ["Microsoft-Windows-Windows Firewall With Advanced Security"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["2006", "2033"]
+    notes: "Приложение, изменяющее правило брандмауэра (ModifyingApplication)"
+
+  - name: "store_type"
+    internal_name: "store_type"
+    display_name: "Store Type"
+    data_type: "integer"
+    log_sources: ["Microsoft-Windows-Windows Firewall With Advanced Security"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: ["2033"]
+    notes: "Тип хранилища брандмауэра (Store Type)"
+
+  # ==========================================================
+  # ОБЩИЕ ПОЛЯ (для всех логов)
+  # ==========================================================
+
+  - name: "event_id"
+    internal_name: "event_id"
+    display_name: "Event ID"
+    data_type: "integer"
+    log_sources: ["*"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: []
+    notes: "ID события (EventID)"
+
+  - name: "event_log_source"
+    internal_name: "event_log_source"
+    display_name: "Event Log Source"
+    data_type: "string"
+    log_sources: ["*"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: []
+    notes: "Источник события (SourceName или event_log_source)"
+
+  - name: "event_log_name"
+    internal_name: "event_log_name"
+    display_name: "Event Log Name"
+    data_type: "string"
+    log_sources: ["*"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: []
+    notes: "Имя лога (Channel или event_log_name)"
+
+  - name: "event_time"
+    internal_name: "event_time"
+    display_name: "Event Time"
+    data_type: "timestamp"
+    log_sources: ["*"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: []
+    notes: "Время события (EventTime)"
+
+  - name: "event_type"
+    internal_name: "event_type"
+    display_name: "Event Type"
+    data_type: "string"
+    log_sources: ["*"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: []
+    notes: "Тип события: INFO, WARNING, ERROR, AUDIT_SUCCESS, AUDIT_FAILURE"
+
+  - name: "dev_hostname"
+    internal_name: "dev_hostname"
+    display_name: "Device Hostname"
+    data_type: "string"
+    log_sources: ["*"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: []
+    notes: "Имя хоста (dev_hostname или Hostname)"
+
+  - name: "dev_ipv4"
+    internal_name: "dev_ipv4"
+    display_name: "Device IPv4"
+    data_type: "ip"
+    log_sources: ["*"]
+    availability: "full"
+    adversary_control: "LOW"
+    used_in_events: []
+    notes: "IP адрес устройства (dev_ipv4 или HostIP)"

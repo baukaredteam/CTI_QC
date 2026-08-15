@@ -1,0 +1,61 @@
+# AdversaryGraph Usecases.
+
+## Usecase number "15"
+
+### Import MISP JSON: AdversaryGraph Use Case
+
+**Version focus:** AdversaryGraph v3.1.0
+**Level:** Intermediate, 3-5 steps
+**Workflow group:** Intermediate Usecases
+
+## Table Of Contents
+
+- [Why This Use Case Matters](#why-this-use-case-matters)
+- [Real-Life Scenario](#real-life-scenario)
+- [Workflow](#workflow)
+- [Expected Output](#expected-output)
+- [Analyst Review Standard](#analyst-review-standard)
+- [Where This Fits](#where-this-fits)
+
+## Walkthrough GIF
+
+![Usecase 15 - Import MISP JSON walkthrough](../assets/use-cases/usecase-15-import-misp-json.gif)
+
+## Why This Use Case Matters
+
+AdversaryGraph is useful when an analyst needs to move from raw intelligence to reviewed action: ATT&CK mapping, IOC enrichment, actor context, feed synchronization, matrix visualization, detection generation, and exportable evidence. This use case shows one practical way to use the platform without separating the work across spreadsheets, browser tabs, and disconnected notes.
+
+## Real-Life Scenario
+
+**Situation:** A partner shares a MISP event or attribute export that needs to be used inside the local investigation workflow.
+
+**Analyst objective:** Import MISP data as a source without manually retyping indicators.
+
+**Operational pressure:** The analyst needs an answer that is fast enough for daily work but still traceable enough for customer reporting, detection engineering, or later peer review.
+
+## Workflow
+
+1. **Open Feeds Management or IOC Library.**
+2. **Paste the MISP JSON export URL or load a local gateway URL.**
+3. **Import and review parsed IOCs.**
+4. **Filter imported values by source and actor.**
+
+## Expected Output
+
+MISP-backed indicators stored in the IOC Library with source and context preserved.
+
+## Analyst Review Standard
+
+- Preserve source labels and timestamps for every finding.
+- Mark weak or incomplete evidence as `needs-evidence` instead of forcing a conclusion.
+- Treat actor similarity as a hypothesis, not attribution.
+- Prefer source-backed report evidence first, enrichment-platform evidence second, and AI enrichment only as reviewed support.
+- Export only findings that have been reviewed by an analyst.
+
+## Where This Fits
+
+This use case supports CTI production, SOC triage, threat hunting, detection engineering, customer reporting, or platform validation depending on the workflow level.
+
+**Project:** https://github.com/anpa1200/adversarygraph
+**Docs:** https://1200km.com/adversarygraph-docs/
+**Use cases:** https://1200km.com/adversarygraph/use-cases.html

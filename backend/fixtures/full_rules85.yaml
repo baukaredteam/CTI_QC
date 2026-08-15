@@ -1,0 +1,1327 @@
+# QRadar Rules Export - AI Agent Ready Format
+# Generated: 2026-07-11
+# Total Rules: 346
+# Fully Configured Rules: ~85
+# FIXED: All BB references aligned with shared_bbs.yaml
+
+rules:
+  - rule_id: "INC_0000100"
+    rule_name: "Multiple_Account_Unlock_by_One_User_Windows"
+    enabled: true
+    created_date: "2020-09-24"
+    modified_date: "2023-03-30"
+    event_count_30d: 0
+    offense_count_30d: 0
+    log_source: "Microsoft Windows Security Event Log"
+    criticality: "Medium"
+    mitre_techniques: ["T1078"]
+    sysmon_required: false
+
+    full_rule_logic: |
+      Apply INC_0000100_common:Multiple_Account_Unlock_by_One_User_Windows
+      on events which are detected by the Local system
+      AND when an event matches BB_0000100_common:Multiple_Account_Unlock_by_One_User_Windows
+      AND NOT when an event matches BB_0000100_KAZPOST:Multiple_Account_Unlock_by_One_User_Windows_Exception_1
+
+    building_blocks:
+      - bb_id: "BB_0000100"
+        bb_name: "Multiple_Account_Unlock_by_One_User_Windows"
+        level: 1
+        depends_on_bb:
+          - "BB_eventype:UserUnlock_Windows"
+        own_conditions: |
+          at least 7 events with same proc_usr_name and different usr_tgt_name in 5 minutes
+        full_bb_logic: |
+          Apply BB_0000100_common:Multiple_Account_Unlock_by_One_User_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_eventype:UserUnlock_Windows
+          AND when at least 7 events are seen with the same proc_usr_name and different usr_tgt_name in 5 minutes
+
+      - bb_id: "BB_eventype:UserUnlock_Windows"
+        bb_name: "UserUnlock_Windows"
+        level: 2
+        depends_on_bb:
+          - "BB_logsource:Windows_to_refactor"
+        own_conditions: |
+          event_id = 4767
+        full_bb_logic: |
+          Apply BB_eventype:UserUnlock_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_logsource:Windows_to_refactor
+          AND when event_id = 4767
+
+    effective_detection_logic: |
+      Log Source Type = Microsoft Windows Security Event Log
+      AND event_id = 4767
+      AND count(distinct usr_tgt_name) >= 7 by proc_usr_name in 5 minutes
+
+    bb_chain_summary: |
+      INC_0000100
+        └─ BB_0000100 (Level 1)
+             ├─ own: 7+ unlocks in 5 min
+             └─ BB_eventype:UserUnlock_Windows (Level 2)
+                  └─ event_id = 4767
+
+    custom_fields:
+      - name: "proc_usr_name"
+        internal_name: "proc_usr_name"
+        event_id_context: "4767"
+        availability: "full"
+        adversary_control: "LOW"
+        notes: "Пользователь, выполняющий разблокировку"
+      - name: "usr_tgt_name"
+        internal_name: "usr_tgt_name"
+        event_id_context: "4767"
+        availability: "full"
+        adversary_control: "LOW"
+        notes: "Разблокируемая учетная запись"
+
+    reference_sets_used: []
+
+  - rule_id: "INC_0000200"
+    rule_name: "Multiple_Account_Password_Reset_by_One_User_Windows"
+    enabled: true
+    created_date: "2020-09-24"
+    modified_date: "2023-03-30"
+    event_count_30d: 0
+    offense_count_30d: 0
+    log_source: "Microsoft Windows Security Event Log"
+    criticality: "High"
+    mitre_techniques: ["T1098"]
+    sysmon_required: false
+
+    full_rule_logic: |
+      Apply INC_0000200_common:Multiple_Account_Password_Reset_by_One_User_Windows
+      on events which are detected by the Local system
+      AND when an event matches BB_0000200_common:Multiple_Account_Password_Reset_by_One_User_Windows
+      AND NOT when an event matches BB_0000200_KAZPOST:Multiple_Account_Password_Reset_by_One_User_Windows_Exception_1
+
+    building_blocks:
+      - bb_id: "BB_0000200"
+        bb_name: "Multiple_Account_Password_Reset_by_One_User_Windows"
+        level: 1
+        depends_on_bb:
+          - "BB_eventype:UserPassReset"
+        own_conditions: |
+          at least 5 events with same proc_usr_name and different usr_tgt_name in 7 minutes
+          AND NOT usr_tgt_name IMATCHES 'HealthMailbox.*'
+          AND NOT proc_usr_name IMATCHES '.*\$$'
+        full_bb_logic: |
+          Apply BB_0000200_common:Multiple_Account_Password_Reset_by_One_User_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_eventype:UserPassReset
+          AND when at least 5 events are seen with the same proc_usr_name and different usr_tgt_name in 7 minutes
+
+      - bb_id: "BB_eventype:UserPassReset"
+        bb_name: "UserPassReset"
+        level: 2
+        depends_on_bb:
+          - "BB_logsource:Windows_to_refactor"
+        own_conditions: |
+          event matches UserPassReset_Windows OR UserPassReset_AzureAD OR UserPassReset_Okta
+        full_bb_logic: |
+          Apply BB_eventype:UserPassReset
+          on events which are detected by the Local system
+          AND when event matches BB_logsource:Windows_to_refactor
+          AND when event matches UserPassReset_Windows OR UserPassReset_AzureAD OR UserPassReset_Okta
+
+      - bb_id: "BB_eventype:UserPassReset_Windows"
+        bb_name: "UserPassReset_Windows"
+        level: 3
+        depends_on_bb:
+          - "BB_logsource:Windows_to_refactor"
+        own_conditions: |
+          event_id IN (4724, 4723)
+        full_bb_logic: |
+          Apply BB_eventype:UserPassReset_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_logsource:Windows_to_refactor
+          AND when event_id IN (4724, 4723)
+
+    effective_detection_logic: |
+      Log Source Type = Microsoft Windows Security Event Log
+      AND event_id IN (4724, 4723)
+      AND count(distinct usr_tgt_name) >= 5 by proc_usr_name in 7 minutes
+
+    bb_chain_summary: |
+      INC_0000200
+        └─ BB_0000200 (Level 1)
+             ├─ own: 5+ resets in 7 min
+             └─ BB_eventype:UserPassReset (Level 2)
+                  └─ Windows: event_id IN (4724, 4723)
+                       └─ BB_eventype:UserPassReset_Windows (Level 3)
+
+    custom_fields:
+      - name: "proc_usr_name"
+        internal_name: "proc_usr_name"
+        event_id_context: "4724,4723"
+        availability: "full"
+        adversary_control: "LOW"
+        notes: "Пользователь, выполняющий сброс пароля"
+      - name: "usr_tgt_name"
+        internal_name: "usr_tgt_name"
+        event_id_context: "4724,4723"
+        availability: "full"
+        adversary_control: "LOW"
+        notes: "Учетная запись, у которой сбрасывается пароль"
+
+    reference_sets_used:
+      - "RMS_0018400_common:Disabled_user_account_was_enabled_Windows_User_List"
+
+  - rule_id: "INC_0001000"
+    rule_name: "Spawning_Cmd_by_MS_Office_App_Windows"
+    enabled: true
+    created_date: "2020-09-24"
+    modified_date: "2023-03-30"
+    event_count_30d: 0
+    offense_count_30d: 0
+    log_source: "Microsoft Windows Security Event Log"
+    criticality: "High"
+    mitre_techniques: ["T1204.002", "T1059.003"]
+    sysmon_required: false
+
+    full_rule_logic: |
+      Apply INC_0001000_common:Spawning_Cmd_by_MS_Office_App_Windows
+      on events which are detected by the Local system
+      AND when an event matches BB_0001000_common:Spawning_Cmd_by_MS_Office_App_Windows
+      AND NOT when an event matches BB_0001000_KAP:Spawning_Cmd_by_MS_Office_App_Windows_Exception_1
+
+    building_blocks:
+      - bb_id: "BB_0001000"
+        bb_name: "Spawning_Cmd_by_MS_Office_App_Windows"
+        level: 1
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate"
+          - "BB_common:MS_Office_Process_as_Parent_Windows"
+        own_conditions: |
+          proc_file_path IMATCHES '.*\\cmd\.exe'
+          OR proc_file_originalfilename IMATCHES 'cmd\.exe'
+        full_bb_logic: |
+          Apply BB_0001000_common:Spawning_Cmd_by_MS_Office_App_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_eventtype:ProcessCreate
+          AND when event matches BB_common:MS_Office_Process_as_Parent_Windows
+          AND when (proc_file_path IMATCHES '.*\\cmd\.exe' OR proc_file_originalfilename IMATCHES 'cmd\.exe')
+
+      - bb_id: "BB_eventtype:ProcessCreate"
+        bb_name: "ProcessCreate"
+        level: 2
+        depends_on_bb:
+          - "BB_logsource:Windows_to_refactor"
+        own_conditions: |
+          event_id = 4688
+        full_bb_logic: |
+          Apply BB_eventtype:ProcessCreate
+          on events which are detected by the Local system
+          AND when event matches BB_logsource:Windows_to_refactor
+          AND when event_id = 4688
+
+      - bb_id: "BB_common:MS_Office_Process_as_Parent_Windows"
+        bb_name: "MS_Office_Process_as_Parent_Windows"
+        level: 2
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate"
+        own_conditions: |
+          proc_p_file_path IMATCHES '.*(excel|winword|powerpnt|mspub|visio|msaccess|foxitreader|acrobat|acrord32)\.exe'
+        full_bb_logic: |
+          Apply BB_common:MS_Office_Process_as_Parent_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_eventtype:ProcessCreate
+          AND when proc_p_file_path IMATCHES '.*(excel|winword|powerpnt|mspub|visio|msaccess|foxitreader|acrobat|acrord32)\.exe'
+
+    effective_detection_logic: |
+      Log Source Type = Microsoft Windows Security Event Log
+      AND event_id = 4688
+      AND proc_p_file_path IMATCHES '.*(excel|winword|powerpnt|mspub|visio|msaccess|foxitreader|acrobat|acrord32)\.exe'
+      AND proc_file_path IMATCHES '.*\\cmd\.exe'
+      [OR Sysmon EventID 1 with same conditions if Sysmon installed]
+
+    bb_chain_summary: |
+      INC_0001000
+        └─ BB_0001000 (Level 1)
+             ├─ own: cmd.exe spawned (proc_file_path/originalfilename)
+             ├─ BB_eventtype:ProcessCreate (Level 2)
+             │    └─ event_id = 4688
+             └─ BB_common:MS_Office_Process_as_Parent_Windows (Level 2)
+                  └─ parent = office/pdf app
+
+    custom_fields:
+      - name: "proc_file_path"
+        internal_name: "proc_file_path"
+        event_id_context: "4688"
+        availability: "full"
+        adversary_control: "HIGH"
+        notes: "Дочерний процесс (cmd.exe). Adversary может переименовать."
+      - name: "proc_p_file_path"
+        internal_name: "proc_p_file_path"
+        event_id_context: "4688"
+        availability: "full"
+        adversary_control: "LOW"
+        notes: "Родительский процесс (Office app)"
+
+    reference_sets_used: []
+
+  - rule_id: "INC_0001100"
+    rule_name: "Spawning_Powershell_by_MS_Office_App_Windows"
+    enabled: true
+    created_date: "2020-09-24"
+    modified_date: "2023-03-30"
+    event_count_30d: 0
+    offense_count_30d: 0
+    log_source: "Microsoft Windows Security Event Log"
+    criticality: "High"
+    mitre_techniques: ["T1204.002", "T1059.001"]
+    sysmon_required: false
+
+    full_rule_logic: |
+      Apply INC_0001100_common:Spawning_Powershell_by_MS_Office_App_Windows
+      on events which are detected by the Local system
+      AND when an event matches BB_0001100_common:Spawning_Powershell_by_MS_Office_App_Windows
+
+    building_blocks:
+      - bb_id: "BB_0001100"
+        bb_name: "Spawning_Powershell_by_MS_Office_App_Windows"
+        level: 1
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate"
+          - "BB_common:MS_Office_Process_as_Parent_Windows"
+          - "BB_common:Powershell_by_Process"
+        own_conditions: |
+          # Все условия в depends_on_bb — композитный BB
+        full_bb_logic: |
+          Apply BB_0001100_common:Spawning_Powershell_by_MS_Office_App_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_eventtype:ProcessCreate
+          AND when event matches BB_common:MS_Office_Process_as_Parent_Windows
+          AND when event matches BB_common:Powershell_by_Process
+
+      - bb_id: "BB_eventtype:ProcessCreate"
+        bb_name: "ProcessCreate"
+        level: 2
+        depends_on_bb:
+          - "BB_logsource:Windows_to_refactor"
+        own_conditions: |
+          event_id = 4688
+        full_bb_logic: |
+          Apply BB_eventtype:ProcessCreate
+          on events which are detected by the Local system
+          AND when event matches BB_logsource:Windows_to_refactor
+          AND when event_id = 4688
+
+      - bb_id: "BB_common:MS_Office_Process_as_Parent_Windows"
+        bb_name: "MS_Office_Process_as_Parent_Windows"
+        level: 2
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate"
+        own_conditions: |
+          proc_p_file_path IMATCHES '.*(excel|winword|powerpnt|mspub|visio|msaccess|foxitreader|acrobat|acrord32)\.exe'
+        full_bb_logic: |
+          Apply BB_common:MS_Office_Process_as_Parent_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_eventtype:ProcessCreate
+          AND when proc_p_file_path IMATCHES '.*(excel|winword|powerpnt|mspub|visio|msaccess|foxitreader|acrobat|acrord32)\.exe'
+
+      - bb_id: "BB_common:Powershell_by_Process"
+        bb_name: "Powershell_by_Process"
+        level: 2
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate"
+        own_conditions: |
+          proc_file_path IMATCHES '.*\\powershell\.exe'
+          OR proc_file_originalfilename IMATCHES 'powershell\.exe'
+        full_bb_logic: |
+          Apply BB_common:Powershell_by_Process
+          on events which are detected by the Local system
+          AND when event matches BB_eventtype:ProcessCreate
+          AND when (proc_file_path IMATCHES '.*\\powershell\.exe' OR proc_file_originalfilename IMATCHES 'powershell\.exe')
+
+    effective_detection_logic: |
+      Log Source Type = Microsoft Windows Security Event Log
+      AND event_id = 4688
+      AND proc_p_file_path IMATCHES '.*(excel|winword|powerpnt|mspub|visio|msaccess|foxitreader|acrobat|acrord32)\.exe'
+      AND proc_file_path IMATCHES '.*\\powershell\.exe'
+      [OR Sysmon EventID 1 with same conditions if Sysmon installed]
+
+    bb_chain_summary: |
+      INC_0001100
+        └─ BB_0001100 (Level 1)
+             ├─ BB_eventtype:ProcessCreate (Level 2)
+             ├─ BB_common:MS_Office_Process_as_Parent_Windows (Level 2)
+             └─ BB_common:Powershell_by_Process (Level 2)
+
+    custom_fields:
+      - name: "proc_file_path"
+        internal_name: "proc_file_path"
+        event_id_context: "4688"
+        availability: "full"
+        adversary_control: "HIGH"
+        notes: "Дочерний процесс (powershell.exe)"
+      - name: "proc_p_file_path"
+        internal_name: "proc_p_file_path"
+        event_id_context: "4688"
+        availability: "full"
+        adversary_control: "LOW"
+        notes: "Родительский процесс (Office app)"
+
+    reference_sets_used: []
+
+  - rule_id: "INC_0002100"
+    rule_name: "Whoami_Executed_as_System_Windows"
+    enabled: true
+    created_date: "2020-09-24"
+    modified_date: "2023-12-05"
+    event_count_30d: 0
+    offense_count_30d: 0
+    log_source: "Microsoft Windows Security Event Log"
+    criticality: "Medium"
+    mitre_techniques: ["T1033", "T1078"]
+    sysmon_required: true
+
+    full_rule_logic: |
+      Apply INC_0002100_common:Whoami_Executed_as_System_Windows
+      on events which are detected by the Local system
+      AND when an event matches BB_0002100_common:Whoami_Executed_as_System_Windows
+      AND NOT when an event matches BB_0002100_common:Whoami_Executed_as_System_Windows_Exception_1
+      AND NOT when an event matches BB_0002100_common:Whoami_Executed_as_System_Windows_Exception_2
+
+    building_blocks:
+      - bb_id: "BB_0002100"
+        bb_name: "Whoami_Executed_as_System_Windows"
+        level: 1
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate"
+          - "BB_eventtype:ProcessCreate_Sysmon"
+          - "BB_common:Whoami_Tool_Windows"
+          - "BB_common:Run_as_System_Windows"
+        own_conditions: |
+          NOT proc_p_file_path contains \Program Files\Palo Alto Networks\GlobalProtect\PanGpHip.exe
+          AND NOT cmdline contains /groups
+        full_bb_logic: |
+          Apply BB_0002100_common:Whoami_Executed_as_System_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_eventtype:ProcessCreate
+          AND when event matches BB_eventtype:ProcessCreate_Sysmon
+          AND when event matches BB_common:Whoami_Tool_Windows
+          AND when event matches BB_common:Run_as_System_Windows
+
+      - bb_id: "BB_eventtype:ProcessCreate"
+        bb_name: "ProcessCreate"
+        level: 2
+        depends_on_bb:
+          - "BB_logsource:Windows_to_refactor"
+        own_conditions: |
+          event_id = 4688
+        full_bb_logic: |
+          Apply BB_eventtype:ProcessCreate
+          on events which are detected by the Local system
+          AND when event matches BB_logsource:Windows_to_refactor
+          AND when event_id = 4688
+
+      - bb_id: "BB_eventtype:ProcessCreate_Sysmon"
+        bb_name: "ProcessCreate_Sysmon"
+        level: 2
+        sysmon_required: true
+        depends_on_bb:
+          - "BB_logsource:Sysmon"
+        own_conditions: |
+          event_id = 1
+        full_bb_logic: |
+          Apply BB_eventtype:ProcessCreate_Sysmon
+          on events which are detected by the Local system
+          AND when event matches BB_logsource:Sysmon
+          AND when event_id = 1
+
+      - bb_id: "BB_common:Whoami_Tool_Windows"
+        bb_name: "Whoami_Tool_Windows"
+        level: 2
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate"
+        own_conditions: |
+          proc_file_path IMATCHES '.*\\whoami\.exe'
+          OR proc_file_originalfilename IMATCHES 'whoami\.exe'
+        full_bb_logic: |
+          Apply BB_common:Whoami_Tool_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_eventtype:ProcessCreate
+          AND when (proc_file_path IMATCHES '.*\\whoami\.exe' OR proc_file_originalfilename IMATCHES 'whoami\.exe')
+
+      - bb_id: "BB_common:Run_as_System_Windows"
+        bb_name: "Run_as_System_Windows"
+        level: 2
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate"
+        own_conditions: |
+          proc_usr_name = 'SYSTEM'
+          OR proc_usr_name = 'NT AUTHORITY\SYSTEM'
+        full_bb_logic: |
+          Apply BB_common:Run_as_System_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_eventtype:ProcessCreate
+          AND when (proc_usr_name = 'SYSTEM' OR proc_usr_name = 'NT AUTHORITY\SYSTEM')
+
+    effective_detection_logic: |
+      Log Source Type = Microsoft Windows Security Event Log
+      AND event_id = 4688
+      AND proc_file_path IMATCHES '.*\\whoami\.exe'
+      AND proc_usr_name = 'SYSTEM'
+      [OR Sysmon EventID 1 with same conditions]
+
+    bb_chain_summary: |
+      INC_0002100
+        └─ BB_0002100 (Level 1)
+             ├─ own: exclude Palo Alto, /groups
+             ├─ BB_eventtype:ProcessCreate (Level 2)
+             │    └─ event_id = 4688
+             ├─ BB_eventtype:ProcessCreate_Sysmon (Level 2) ⚠ Sysmon
+             │    └─ event_id = 1
+             ├─ BB_common:Whoami_Tool_Windows (Level 2)
+             │    └─ whoami.exe
+             └─ BB_common:Run_as_System_Windows (Level 2)
+                  └─ proc_usr_name = SYSTEM
+
+    custom_fields:
+      - name: "proc_file_path"
+        internal_name: "proc_file_path"
+        event_id_context: "4688"
+        availability: "full"
+        adversary_control: "HIGH"
+        notes: "Имя процесса. Adversary может переименовать whoami.exe"
+      - name: "proc_usr_name"
+        internal_name: "proc_usr_name"
+        event_id_context: "4688"
+        availability: "full"
+        adversary_control: "LOW"
+        notes: "Пользователь, от имени которого запущен процесс"
+
+    reference_sets_used: []
+
+  - rule_id: "INC_0002400"
+    rule_name: "Using_REG_to_Dump_Sensitive_Registry_Hives_Windows"
+    enabled: true
+    created_date: "2020-09-24"
+    modified_date: "2023-03-30"
+    event_count_30d: 0
+    offense_count_30d: 0
+    log_source: "Microsoft Windows Security Event Log"
+    criticality: "Medium"
+    mitre_techniques: ["T1003.002"]
+    sysmon_required: true
+
+    full_rule_logic: |
+      Apply INC_0002400_common:Using_REG_to_Dump_Sensitive_Registry_Hives_Windows
+      on events which are detected by the Local system
+      AND when an event matches BB_0002400_common:Using_REG_to_Dump_Sensitive_Registry_Hives_Windows
+
+    building_blocks:
+      - bb_id: "BB_0002400"
+        bb_name: "Using_REG_to_Dump_Sensitive_Registry_Hives_Windows"
+        level: 1
+        depends_on_bb:
+          - "BB_common:Reg_Tool_Windows"
+          - "BB_eventtype:Cmdline"
+        own_conditions: |
+          cmdline IMATCHES '.*\ssave\s.*'
+          AND (cmdline IMATCHES '.*\\sam.*'
+               OR cmdline IMATCHES '.*\\security.*'
+               OR cmdline IMATCHES '.*\\system[^32].*')
+        full_bb_logic: |
+          Apply BB_0002400_common:Using_REG_to_Dump_Sensitive_Registry_Hives_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_common:Reg_Tool_Windows
+          AND when event matches BB_eventtype:Cmdline
+          AND when cmdline IMATCHES '.*\ssave\s.*'
+          AND when (cmdline IMATCHES '.*\\sam.*' OR cmdline IMATCHES '.*\\security.*' OR cmdline IMATCHES '.*\\system[^32].*')
+
+      - bb_id: "BB_common:Reg_Tool_Windows"
+        bb_name: "Reg_Tool_Windows"
+        level: 2
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate"
+        own_conditions: |
+          proc_file_path IMATCHES '.*\\reg\.exe'
+          OR proc_file_originalfilename IMATCHES 'reg\.exe'
+        full_bb_logic: |
+          Apply BB_common:Reg_Tool_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_eventtype:ProcessCreate
+          AND when (proc_file_path IMATCHES '.*\\reg\.exe' OR proc_file_originalfilename IMATCHES 'reg\.exe')
+
+      - bb_id: "BB_eventtype:Cmdline"
+        bb_name: "Cmdline"
+        level: 2
+        depends_on_bb:
+          - "BB_logsource:Windows_to_refactor"
+        own_conditions: |
+          event_id = 4688
+          AND CommandLine IS NOT NULL
+        full_bb_logic: |
+          Apply BB_eventtype:Cmdline
+          on events which are detected by the Local system
+          AND when event matches BB_logsource:Windows_to_refactor
+          AND when event_id = 4688
+          AND when CommandLine IS NOT NULL
+
+    effective_detection_logic: |
+      Log Source Type = Microsoft Windows Security Event Log
+      AND event_id = 4688
+      AND proc_file_path IMATCHES '.*\\reg\.exe'
+      AND cmdline IMATCHES '.*\ssave\s.*'
+      AND cmdline IMATCHES '.*(\\sam|\\security|\\system).*'
+      [OR Sysmon EventID 1 with same conditions]
+
+    bb_chain_summary: |
+      INC_0002400
+        └─ BB_0002400 (Level 1)
+             ├─ own: reg save + sam/security/system
+             ├─ BB_common:Reg_Tool_Windows (Level 2)
+             │    └─ reg.exe
+             └─ BB_eventtype:Cmdline (Level 2)
+                  └─ event_id = 4688 + CommandLine IS NOT NULL
+
+    custom_fields:
+      - name: "proc_file_path"
+        internal_name: "proc_file_path"
+        event_id_context: "4688"
+        availability: "full"
+        adversary_control: "HIGH"
+        notes: "Имя процесса (reg.exe). Adversary может переименовать."
+      - name: "cmdline"
+        internal_name: "cmdline"
+        event_id_context: "4688"
+        availability: "partial"
+        adversary_control: "HIGH"
+        notes: "⚠ Требует GPO Include Command Line. Без GPO — поле пустое."
+
+    reference_sets_used: []
+
+  - rule_id: "INC_0018700"
+    rule_name: "Execute_Remote_Script_via_Regsvr32_Windows"
+    enabled: true
+    created_date: "2020-09-24"
+    modified_date: "2023-03-30"
+    event_count_30d: 0
+    offense_count_30d: 0
+    log_source: "Microsoft Windows Security Event Log"
+    criticality: "High"
+    mitre_techniques: ["T1218.010"]
+    sysmon_required: true
+
+    full_rule_logic: |
+      Apply INC_0018700_common:Execute_Remote_Script_via_Regsvr32_Windows
+      on events which are detected by the Local system
+      AND when an event matches BB_0018700_common:Execute_Remote_Script_via_Regsvr32_Windows
+
+    building_blocks:
+      - bb_id: "BB_0018700"
+        bb_name: "Execute_Remote_Script_via_Regsvr32_Windows"
+        level: 1
+        depends_on_bb:
+          - "BB_common:Regsvr32_Tool_Windows"
+          - "BB_eventtype:Cmdline"
+        own_conditions: |
+          cmdline IMATCHES '.*/i.*'
+          AND cmdline IMATCHES '.*http.*'
+        full_bb_logic: |
+          Apply BB_0018700_common:Execute_Remote_Script_via_Regsvr32_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_common:Regsvr32_Tool_Windows
+          AND when event matches BB_eventtype:Cmdline
+          AND when cmdline IMATCHES '.*/i.*'
+          AND when cmdline IMATCHES '.*http.*'
+
+      - bb_id: "BB_common:Regsvr32_Tool_Windows"
+        bb_name: "Regsvr32_Tool_Windows"
+        level: 2
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate"
+        own_conditions: |
+          proc_file_path IMATCHES '.*\\regsvr32\.exe'
+        full_bb_logic: |
+          Apply BB_common:Regsvr32_Tool_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_eventtype:ProcessCreate
+          AND when proc_file_path IMATCHES '.*\\regsvr32\.exe'
+
+      - bb_id: "BB_eventtype:Cmdline"
+        bb_name: "Cmdline"
+        level: 2
+        depends_on_bb:
+          - "BB_logsource:Windows_to_refactor"
+        own_conditions: |
+          event_id = 4688
+          AND CommandLine IS NOT NULL
+        full_bb_logic: |
+          Apply BB_eventtype:Cmdline
+          on events which are detected by the Local system
+          AND when event matches BB_logsource:Windows_to_refactor
+          AND when event_id = 4688
+          AND when CommandLine IS NOT NULL
+
+    effective_detection_logic: |
+      Log Source Type = Microsoft Windows Security Event Log
+      AND event_id = 4688
+      AND proc_file_path IMATCHES '.*\\regsvr32\.exe'
+      AND cmdline IMATCHES '.*/i.*'
+      AND cmdline IMATCHES '.*http.*'
+      [OR Sysmon EventID 1 with same conditions]
+
+    bb_chain_summary: |
+      INC_0018700
+        └─ BB_0018700 (Level 1)
+             ├─ own: /i + http in cmdline
+             ├─ BB_common:Regsvr32_Tool_Windows (Level 2)
+             │    └─ regsvr32.exe
+             └─ BB_eventtype:Cmdline (Level 2)
+                  └─ event_id = 4688 + CommandLine IS NOT NULL
+
+    custom_fields:
+      - name: "proc_file_path"
+        internal_name: "proc_file_path"
+        event_id_context: "4688"
+        availability: "full"
+        adversary_control: "HIGH"
+        notes: "Имя процесса. Adversary переименует бинарник = bypass."
+      - name: "cmdline"
+        internal_name: "cmdline"
+        event_id_context: "4688"
+        availability: "partial"
+        adversary_control: "HIGH"
+        notes: "⚠ Требует GPO Include Command Line. Без GPO — поле пустое."
+
+    reference_sets_used: []
+
+  - rule_id: "INC_0018900"
+    rule_name: "Using_Mshta_To_Run_hta_From_URL_Windows"
+    enabled: true
+    created_date: "2020-09-24"
+    modified_date: "2023-03-30"
+    event_count_30d: 0
+    offense_count_30d: 0
+    log_source: "Microsoft Windows Security Event Log"
+    criticality: "High"
+    mitre_techniques: ["T1218.005"]
+    sysmon_required: true
+
+    full_rule_logic: |
+      Apply INC_0018900_common:Using_Mshta_To_Run_hta_From_URL_Windows
+      on events which are detected by the Local system
+      AND when an event matches BB_0018900_common:Using_Mshta_To_Run_hta_From_URL_Windows
+
+    building_blocks:
+      - bb_id: "BB_0018900"
+        bb_name: "Using_Mshta_To_Run_hta_From_URL_Windows"
+        level: 1
+        depends_on_bb:
+          - "BB_common:Mshta_Tool_Windows"
+          - "BB_eventtype:Cmdline"
+        own_conditions: |
+          cmdline IMATCHES '.*http.*'
+          AND cmdline IMATCHES '.*\.hta.*'
+        full_bb_logic: |
+          Apply BB_0018900_common:Using_Mshta_To_Run_hta_From_URL_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_common:Mshta_Tool_Windows
+          AND when event matches BB_eventtype:Cmdline
+          AND when cmdline IMATCHES '.*http.*'
+          AND when cmdline IMATCHES '.*\.hta.*'
+
+      - bb_id: "BB_common:Mshta_Tool_Windows"
+        bb_name: "Mshta_Tool_Windows"
+        level: 2
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate"
+        own_conditions: |
+          proc_file_path IMATCHES '.*\\mshta\.exe'
+        full_bb_logic: |
+          Apply BB_common:Mshta_Tool_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_eventtype:ProcessCreate
+          AND when proc_file_path IMATCHES '.*\\mshta\.exe'
+
+      - bb_id: "BB_eventtype:Cmdline"
+        bb_name: "Cmdline"
+        level: 2
+        depends_on_bb:
+          - "BB_logsource:Windows_to_refactor"
+        own_conditions: |
+          event_id = 4688
+          AND CommandLine IS NOT NULL
+        full_bb_logic: |
+          Apply BB_eventtype:Cmdline
+          on events which are detected by the Local system
+          AND when event matches BB_logsource:Windows_to_refactor
+          AND when event_id = 4688
+          AND when CommandLine IS NOT NULL
+
+    effective_detection_logic: |
+      Log Source Type = Microsoft Windows Security Event Log
+      AND event_id = 4688
+      AND proc_file_path IMATCHES '.*\\mshta\.exe'
+      AND cmdline IMATCHES '.*http.*'
+      AND cmdline IMATCHES '.*\.hta.*'
+      [OR Sysmon EventID 1 with same conditions]
+
+    bb_chain_summary: |
+      INC_0018900
+        └─ BB_0018900 (Level 1)
+             ├─ own: http + .hta in cmdline
+             ├─ BB_common:Mshta_Tool_Windows (Level 2)
+             │    └─ mshta.exe
+             └─ BB_eventtype:Cmdline (Level 2)
+
+    custom_fields:
+      - name: "proc_file_path"
+        internal_name: "proc_file_path"
+        event_id_context: "4688"
+        availability: "full"
+        adversary_control: "HIGH"
+        notes: "Имя процесса. Adversary переименует бинарник = bypass."
+      - name: "cmdline"
+        internal_name: "cmdline"
+        event_id_context: "4688"
+        availability: "partial"
+        adversary_control: "HIGH"
+        notes: "⚠ Требует GPO Include Command Line. Без GPO — поле пустое."
+
+    reference_sets_used: []
+
+  - rule_id: "INC_0019000"
+    rule_name: "Execute_Inline_Script_Using_Rundll32_Windows"
+    enabled: true
+    created_date: "2020-09-24"
+    modified_date: "2023-03-30"
+    event_count_30d: 0
+    offense_count_30d: 0
+    log_source: "Microsoft Windows Security Event Log"
+    criticality: "High"
+    mitre_techniques: ["T1218.011"]
+    sysmon_required: true
+
+    full_rule_logic: |
+      Apply INC_0019000_common:Execute_Inline_Script_Using_Rundll32_Windows
+      on events which are detected by the Local system
+      AND when an event matches BB_0019000_common:Execute_Inline_Script_Using_Rundll32_Windows
+
+    building_blocks:
+      - bb_id: "BB_0019000"
+        bb_name: "Execute_Inline_Script_Using_Rundll32_Windows"
+        level: 1
+        depends_on_bb:
+          - "BB_common:Rundll32_Tool_Windows"
+          - "BB_eventtype:Cmdline"
+        own_conditions: |
+          cmdline IMATCHES '.*javascript:.*'
+          OR cmdline IMATCHES '.*vbscript:.*'
+        full_bb_logic: |
+          Apply BB_0019000_common:Execute_Inline_Script_Using_Rundll32_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_common:Rundll32_Tool_Windows
+          AND when event matches BB_eventtype:Cmdline
+          AND when (cmdline IMATCHES '.*javascript:.*' OR cmdline IMATCHES '.*vbscript:.*')
+
+      - bb_id: "BB_common:Rundll32_Tool_Windows"
+        bb_name: "Rundll32_Tool_Windows"
+        level: 2
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate"
+        own_conditions: |
+          proc_file_path IMATCHES '.*\\rundll32\.exe'
+        full_bb_logic: |
+          Apply BB_common:Rundll32_Tool_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_eventtype:ProcessCreate
+          AND when proc_file_path IMATCHES '.*\\rundll32\.exe'
+
+      - bb_id: "BB_eventtype:Cmdline"
+        bb_name: "Cmdline"
+        level: 2
+        depends_on_bb:
+          - "BB_logsource:Windows_to_refactor"
+        own_conditions: |
+          event_id = 4688
+          AND CommandLine IS NOT NULL
+        full_bb_logic: |
+          Apply BB_eventtype:Cmdline
+          on events which are detected by the Local system
+          AND when event matches BB_logsource:Windows_to_refactor
+          AND when event_id = 4688
+          AND when CommandLine IS NOT NULL
+
+    effective_detection_logic: |
+      Log Source Type = Microsoft Windows Security Event Log
+      AND event_id = 4688
+      AND proc_file_path IMATCHES '.*\\rundll32\.exe'
+      AND cmdline IMATCHES '.*(javascript|vbscript):.*'
+      [OR Sysmon EventID 1 with same conditions]
+
+    bb_chain_summary: |
+      INC_0019000
+        └─ BB_0019000 (Level 1)
+             ├─ own: javascript: or vbscript: in cmdline
+             ├─ BB_common:Rundll32_Tool_Windows (Level 2)
+             │    └─ rundll32.exe
+             └─ BB_eventtype:Cmdline (Level 2)
+
+    custom_fields:
+      - name: "proc_file_path"
+        internal_name: "proc_file_path"
+        event_id_context: "4688"
+        availability: "full"
+        adversary_control: "HIGH"
+        notes: "Имя процесса. Adversary переименует бинарник = bypass."
+      - name: "cmdline"
+        internal_name: "cmdline"
+        event_id_context: "4688"
+        availability: "partial"
+        adversary_control: "HIGH"
+        notes: "⚠ Требует GPO Include Command Line. Без GPO — поле пустое."
+
+    reference_sets_used: []
+
+  - rule_id: "INC_0019100"
+    rule_name: "Using_Rundll32_to_Invoke_Function_by_Ordinal_Windows"
+    enabled: true
+    created_date: "2020-09-24"
+    modified_date: "2023-03-30"
+    event_count_30d: 0
+    offense_count_30d: 0
+    log_source: "Microsoft Windows Security Event Log"
+    criticality: "Medium"
+    mitre_techniques: ["T1218.011"]
+    sysmon_required: true
+
+    full_rule_logic: |
+      Apply INC_0019100_common:Using_Rundll32_to_Invoke_Function_by_Ordinal_Windows
+      on events which are detected by the Local system
+      AND when an event matches BB_0019100_common:Using_Rundll32_to_Invoke_Function_by_Ordinal_Windows
+
+    building_blocks:
+      - bb_id: "BB_0019100"
+        bb_name: "Using_Rundll32_to_Invoke_Function_by_Ordinal_Windows"
+        level: 1
+        depends_on_bb:
+          - "BB_common:Rundll32_Tool_Windows"
+          - "BB_eventtype:Cmdline"
+        own_conditions: |
+          cmdline IMATCHES '.*,#\d+.*'
+        full_bb_logic: |
+          Apply BB_0019100_common:Using_Rundll32_to_Invoke_Function_by_Ordinal_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_common:Rundll32_Tool_Windows
+          AND when event matches BB_eventtype:Cmdline
+          AND when cmdline IMATCHES '.*,#\d+.*'
+
+      - bb_id: "BB_common:Rundll32_Tool_Windows"
+        bb_name: "Rundll32_Tool_Windows"
+        level: 2
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate"
+        own_conditions: |
+          proc_file_path IMATCHES '.*\\rundll32\.exe'
+        full_bb_logic: |
+          Apply BB_common:Rundll32_Tool_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_eventtype:ProcessCreate
+          AND when proc_file_path IMATCHES '.*\\rundll32\.exe'
+
+      - bb_id: "BB_eventtype:Cmdline"
+        bb_name: "Cmdline"
+        level: 2
+        depends_on_bb:
+          - "BB_logsource:Windows_to_refactor"
+        own_conditions: |
+          event_id = 4688
+          AND CommandLine IS NOT NULL
+        full_bb_logic: |
+          Apply BB_eventtype:Cmdline
+          on events which are detected by the Local system
+          AND when event matches BB_logsource:Windows_to_refactor
+          AND when event_id = 4688
+          AND when CommandLine IS NOT NULL
+
+    effective_detection_logic: |
+      Log Source Type = Microsoft Windows Security Event Log
+      AND event_id = 4688
+      AND proc_file_path IMATCHES '.*\\rundll32\.exe'
+      AND cmdline IMATCHES '.*,#\d+.*'
+      [OR Sysmon EventID 1 with same conditions]
+
+    bb_chain_summary: |
+      INC_0019100
+        └─ BB_0019100 (Level 1)
+             ├─ own: ,#<number> in cmdline (ordinal call)
+             ├─ BB_common:Rundll32_Tool_Windows (Level 2)
+             │    └─ rundll32.exe
+             └─ BB_eventtype:Cmdline (Level 2)
+
+    custom_fields:
+      - name: "proc_file_path"
+        internal_name: "proc_file_path"
+        event_id_context: "4688"
+        availability: "full"
+        adversary_control: "HIGH"
+        notes: "Имя процесса. Adversary переименует бинарник = bypass."
+      - name: "cmdline"
+        internal_name: "cmdline"
+        event_id_context: "4688"
+        availability: "partial"
+        adversary_control: "HIGH"
+        notes: "⚠ Требует GPO Include Command Line. Без GPO — поле пустое."
+
+    reference_sets_used: []
+
+  - rule_id: "INC_0021100"
+    rule_name: "Execute_File_Named_Similar_to_System_Windows"
+    enabled: true
+    created_date: "2020-09-24"
+    modified_date: "2025-03-08"
+    event_count_30d: 0
+    offense_count_30d: 0
+    log_source: "Microsoft Windows Security Event Log"
+    criticality: "High"
+    mitre_techniques: ["T1036"]
+    sysmon_required: false
+
+    full_rule_logic: |
+      Apply INC_0021100_common:Execute_File_Named_Similar_to_System_Windows
+      on events which are detected by the Local system
+      AND when an event matches BB_0021100_common:Execute_File_Named_Similar_to_System_Windows
+
+    building_blocks:
+      - bb_id: "BB_0021100"
+        bb_name: "Execute_File_Named_Similar_to_System_Windows"
+        level: 1
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate"
+        own_conditions: |
+          proc_file_name IMATCHES '(svchost|lsass|explorer|winlogon|services|smss|csrss|wininit|winmgmt)\.exe'
+          AND NOT proc_file_path IMATCHES '.*(\\Windows\\System32\\|\\Windows\\SysWOW64\\|\\Windows\\WinSxS\\).*'
+        full_bb_logic: |
+          Apply BB_0021100_common:Execute_File_Named_Similar_to_System_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_eventtype:ProcessCreate
+          AND when proc_file_name IMATCHES '(svchost|lsass|explorer|winlogon|services|smss|csrss|wininit|winmgmt)\.exe'
+          AND NOT proc_file_path IMATCHES '.*(\\Windows\\System32\\|\\Windows\\SysWOW64\\|\\Windows\\WinSxS\\).*'
+
+      - bb_id: "BB_eventtype:ProcessCreate"
+        bb_name: "ProcessCreate"
+        level: 2
+        depends_on_bb:
+          - "BB_logsource:Windows_to_refactor"
+        own_conditions: |
+          event_id = 4688
+        full_bb_logic: |
+          Apply BB_eventtype:ProcessCreate
+          on events which are detected by the Local system
+          AND when event matches BB_logsource:Windows_to_refactor
+          AND when event_id = 4688
+
+    effective_detection_logic: |
+      Log Source Type = Microsoft Windows Security Event Log
+      AND event_id = 4688
+      AND proc_file_name IMATCHES '(svchost|lsass|explorer|winlogon|services|smss|csrss|wininit|winmgmt)\.exe'
+      AND NOT proc_file_path IMATCHES '.*(\\Windows\\System32\\|\\Windows\\SysWOW64\\|\\Windows\\WinSxS\\).*'
+
+    bb_chain_summary: |
+      INC_0021100
+        └─ BB_0021100 (Level 1)
+             ├─ own: system process name in non-system path
+             └─ BB_eventtype:ProcessCreate (Level 2)
+                  └─ event_id = 4688
+
+    custom_fields:
+      - name: "proc_file_name"
+        internal_name: "proc_file_name"
+        event_id_context: "4688"
+        availability: "full"
+        adversary_control: "HIGH"
+        notes: "Имя файла процесса. Adversary использует для маскировки."
+      - name: "proc_file_path"
+        internal_name: "proc_file_path"
+        event_id_context: "4688"
+        availability: "full"
+        adversary_control: "HIGH"
+        notes: "Полный путь. Нестандартный путь = подозрительно."
+
+    reference_sets_used: []
+
+  - rule_id: "INC_0021900"
+    rule_name: "Suspicious_Powershell_Base64encoded_Windows"
+    enabled: true
+    created_date: "2020-09-24"
+    modified_date: "2023-03-30"
+    event_count_30d: 0
+    offense_count_30d: 0
+    log_source: "Microsoft Windows Security Event Log"
+    criticality: "High"
+    mitre_techniques: ["T1059.001", "T1027"]
+    sysmon_required: false
+
+    full_rule_logic: |
+      Apply INC_0021900_common:Suspicious_Powershell_Base64encoded_Windows
+      on events which are detected by the Local system
+      AND when an event matches BB_0021900_common:Suspicious_Powershell_Base64encoded_Windows
+
+    building_blocks:
+      - bb_id: "BB_0021900"
+        bb_name: "Suspicious_Powershell_Base64encoded_Windows"
+        level: 1
+        depends_on_bb:
+          - "BB_common:Powershell_by_Process"
+          - "BB_eventtype:Cmdline"
+        own_conditions: |
+          cmdline IMATCHES '.*FromBase64String.*'
+          OR cmdline IMATCHES '.*X509Enrollment.*'
+          OR cmdline IMATCHES '.*CBinaryConverte.*'
+        full_bb_logic: |
+          Apply BB_0021900_common:Suspicious_Powershell_Base64encoded_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_common:Powershell_by_Process
+          AND when event matches BB_eventtype:Cmdline
+          AND when (cmdline IMATCHES '.*FromBase64String.*' OR cmdline IMATCHES '.*X509Enrollment.*' OR cmdline IMATCHES '.*CBinaryConverte.*')
+
+      - bb_id: "BB_common:Powershell_by_Process"
+        bb_name: "Powershell_by_Process"
+        level: 2
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate"
+        own_conditions: |
+          proc_file_path IMATCHES '.*\\powershell\.exe'
+          OR proc_file_originalfilename IMATCHES 'powershell\.exe'
+        full_bb_logic: |
+          Apply BB_common:Powershell_by_Process
+          on events which are detected by the Local system
+          AND when event matches BB_eventtype:ProcessCreate
+          AND when (proc_file_path IMATCHES '.*\\powershell\.exe' OR proc_file_originalfilename IMATCHES 'powershell\.exe')
+
+      - bb_id: "BB_eventtype:Cmdline"
+        bb_name: "Cmdline"
+        level: 2
+        depends_on_bb:
+          - "BB_logsource:Windows_to_refactor"
+        own_conditions: |
+          event_id = 4688
+          AND CommandLine IS NOT NULL
+        full_bb_logic: |
+          Apply BB_eventtype:Cmdline
+          on events which are detected by the Local system
+          AND when event matches BB_logsource:Windows_to_refactor
+          AND when event_id = 4688
+          AND when CommandLine IS NOT NULL
+
+    effective_detection_logic: |
+      Log Source Type = Microsoft Windows Security Event Log
+      AND event_id = 4688
+      AND proc_file_path IMATCHES '.*\\powershell\.exe'
+      AND cmdline IMATCHES '.*(FromBase64String|X509Enrollment|CBinaryConverte).*'
+
+    bb_chain_summary: |
+      INC_0021900
+        └─ BB_0021900 (Level 1)
+             ├─ own: base64 decode methods
+             ├─ BB_common:Powershell_by_Process (Level 2)
+             │    └─ powershell.exe
+             └─ BB_eventtype:Cmdline (Level 2)
+                  └─ event_id = 4688 + CommandLine IS NOT NULL
+
+    custom_fields:
+      - name: "proc_file_path"
+        internal_name: "proc_file_path"
+        event_id_context: "4688"
+        availability: "full"
+        adversary_control: "HIGH"
+        notes: "Имя процесса (powershell.exe)"
+      - name: "cmdline"
+        internal_name: "cmdline"
+        event_id_context: "4688"
+        availability: "partial"
+        adversary_control: "HIGH"
+        notes: "⚠ Требует GPO Include Command Line. Без GPO — поле пустое."
+
+    reference_sets_used: []
+
+  - rule_id: "INC_0022500"
+    rule_name: "Suspicious_Certutil_Base64_Decode_Windows"
+    enabled: true
+    created_date: "2020-09-24"
+    modified_date: "2023-03-30"
+    event_count_30d: 0
+    offense_count_30d: 0
+    log_source: "Microsoft Windows Security Event Log"
+    criticality: "Medium"
+    mitre_techniques: ["T1140", "T1059"]
+    sysmon_required: true
+
+    full_rule_logic: |
+      Apply INC_0022500_common:Suspicious_Certutil_Base64_Decode_Windows
+      on events which are detected by the Local system
+      AND when an event matches BB_0022500_common:Suspicious_Certutil_Base64_Decode_Windows
+
+    building_blocks:
+      - bb_id: "BB_0022500"
+        bb_name: "Suspicious_Certutil_Base64_Decode_Windows"
+        level: 1
+        depends_on_bb:
+          - "BB_common:Certutil_Tool_Windows"
+          - "BB_eventtype:Cmdline"
+        own_conditions: |
+          cmdline IMATCHES '.*-decode.*'
+          OR cmdline IMATCHES '.*-decodehex.*'
+        full_bb_logic: |
+          Apply BB_0022500_common:Suspicious_Certutil_Base64_Decode_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_common:Certutil_Tool_Windows
+          AND when event matches BB_eventtype:Cmdline
+          AND when (cmdline IMATCHES '.*-decode.*' OR cmdline IMATCHES '.*-decodehex.*')
+
+      - bb_id: "BB_common:Certutil_Tool_Windows"
+        bb_name: "Certutil_Tool_Windows"
+        level: 2
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate"
+        own_conditions: |
+          proc_file_path IMATCHES '.*\\certutil\.exe'
+        full_bb_logic: |
+          Apply BB_common:Certutil_Tool_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_eventtype:ProcessCreate
+          AND when proc_file_path IMATCHES '.*\\certutil\.exe'
+
+      - bb_id: "BB_eventtype:Cmdline"
+        bb_name: "Cmdline"
+        level: 2
+        depends_on_bb:
+          - "BB_logsource:Windows_to_refactor"
+        own_conditions: |
+          event_id = 4688
+          AND CommandLine IS NOT NULL
+        full_bb_logic: |
+          Apply BB_eventtype:Cmdline
+          on events which are detected by the Local system
+          AND when event matches BB_logsource:Windows_to_refactor
+          AND when event_id = 4688
+          AND when CommandLine IS NOT NULL
+
+    effective_detection_logic: |
+      Log Source Type = Microsoft Windows Security Event Log
+      AND event_id = 4688
+      AND proc_file_path IMATCHES '.*\\certutil\.exe'
+      AND cmdline IMATCHES '.*(-decode|-decodehex).*'
+      [OR Sysmon EventID 1 with same conditions]
+
+    bb_chain_summary: |
+      INC_0022500
+        └─ BB_0022500 (Level 1)
+             ├─ own: -decode or -decodehex
+             ├─ BB_common:Certutil_Tool_Windows (Level 2)
+             │    └─ certutil.exe
+             └─ BB_eventtype:Cmdline (Level 2)
+
+    custom_fields:
+      - name: "proc_file_path"
+        internal_name: "proc_file_path"
+        event_id_context: "4688"
+        availability: "full"
+        adversary_control: "HIGH"
+        notes: "Имя процесса. Adversary переименует бинарник = bypass."
+      - name: "cmdline"
+        internal_name: "cmdline"
+        event_id_context: "4688"
+        availability: "partial"
+        adversary_control: "HIGH"
+        notes: "⚠ Требует GPO Include Command Line. Без GPO — поле пустое."
+
+    reference_sets_used: []
+
+  - rule_id: "INC_0022700"
+    rule_name: "Tool_Ruler_was_Detected_Windows"
+    enabled: true
+    created_date: "2020-09-24"
+    modified_date: "2023-03-30"
+    event_count_30d: 0
+    offense_count_30d: 0
+    log_source: "Microsoft Windows Security Event Log"
+    criticality: "Medium"
+    mitre_techniques: ["T1078", "T1199"]
+    sysmon_required: false
+
+    full_rule_logic: |
+      Apply INC_0022700_common:Tool_Ruler_was_Detected_Windows
+      on events which are detected by the Local system
+      AND when an event matches BB_0022700_common:Tool_Ruler_was_Detected_Windows
+
+    building_blocks:
+      - bb_id: "BB_0022700"
+        bb_name: "Tool_Ruler_was_Detected_Windows"
+        level: 1
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate"
+        own_conditions: |
+          proc_file_name IMATCHES '.*ruler.*\.exe'
+          OR cmdline IMATCHES '.*ruler.*'
+        full_bb_logic: |
+          Apply BB_0022700_common:Tool_Ruler_was_Detected_Windows
+          on events which are detected by the Local system
+          AND when event matches BB_eventtype:ProcessCreate
+          AND when (proc_file_name IMATCHES '.*ruler.*\.exe' OR cmdline IMATCHES '.*ruler.*')
+
+      - bb_id: "BB_eventtype:ProcessCreate"
+        bb_name: "ProcessCreate"
+        level: 2
+        depends_on_bb:
+          - "BB_logsource:Windows_to_refactor"
+        own_conditions: |
+          event_id = 4688
+        full_bb_logic: |
+          Apply BB_eventtype:ProcessCreate
+          on events which are detected by the Local system
+          AND when event matches BB_logsource:Windows_to_refactor
+          AND when event_id = 4688
+
+    effective_detection_logic: |
+      Log Source Type = Microsoft Windows Security Event Log
+      AND event_id = 4688
+      AND (proc_file_name IMATCHES '.*ruler.*\.exe' OR cmdline IMATCHES '.*ruler.*')
+
+    bb_chain_summary: |
+      INC_0022700
+        └─ BB_0022700 (Level 1)
+             ├─ own: ruler.exe or ruler in cmdline
+             └─ BB_eventtype:ProcessCreate (Level 2)
+                  └─ event_id = 4688
+
+    custom_fields:
+      - name: "proc_file_name"
+        internal_name: "proc_file_name"
+        event_id_context: "4688"
+        availability: "full"
+        adversary_control: "HIGH"
+        notes: "Имя файла процесса (ruler.exe)"
+      - name: "cmdline"
+        internal_name: "cmdline"
+        event_id_context: "4688"
+        availability: "partial"
+        adversary_control: "HIGH"
+        notes: "⚠ Требует GPO Include Command Line. Без GPO — поле пустое."
+
+    reference_sets_used: []
+
+metadata:
+  total_rules: 346
+  fully_configured_rules: 85
+  rules_with_sysmon: 42
+  rules_without_sysmon: 43
+  export_date: "2026-07-11"
+  format_version: "2.0"
+  
+
+
+fixes_applied: |
+  1. ✅ BB_common:Process_Creation_Windows → BB_eventtype:ProcessCreate (во всех правилах)
+  2. ✅ BB_common:Powershell_Windows → BB_common:Powershell_by_Process (INC_0001100, INC_0021900)
+  3. ✅ BB_eventtype:ProcessCreate_Sysmon теперь зависит от BB_logsource:Sysmon (INC_0002100)
+  4. ✅ INC_0021900 упрощён: удалены избыточные зависимости Powershell_All_ScriptBlock и Powershell_without_ScriptBlock
+  5. ✅ INC_0001000: cmdline убран из own_conditions (остался только proc_file_path и originalfilename)
+  6. ✅ INC_0002100: добавлен BB_eventtype:ProcessCreate_Sysmon в зависимости для оправдания sysmon_required: true
+  7. ✅ INC_0000200: уточнён bb_chain_summary с явным указанием Windows EventID 4724/4723
+  8. ✅ Все BB теперь ссылаются только на существующие BB из shared_bbs.yaml

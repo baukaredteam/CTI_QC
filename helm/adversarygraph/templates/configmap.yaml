@@ -1,0 +1,96 @@
+{{- $production := eq (lower (toString .Values.config.productionMode)) "true" -}}
+{{- if $production -}}
+  {{- if ne (lower (toString .Values.config.authEnabled)) "true" -}}
+    {{- fail "productionMode requires config.authEnabled=true" -}}
+  {{- end -}}
+  {{- if ne (lower (toString .Values.config.secureCookies)) "true" -}}
+    {{- fail "productionMode requires config.secureCookies=true" -}}
+  {{- end -}}
+  {{- if or (empty .Values.config.corsAllowedOrigins) (contains "*" .Values.config.corsAllowedOrigins) -}}
+    {{- fail "productionMode requires explicit HTTPS config.corsAllowedOrigins without wildcards" -}}
+  {{- end -}}
+  {{- range $origin := splitList "," .Values.config.corsAllowedOrigins -}}
+    {{- if not (hasPrefix "https://" (trim $origin)) -}}
+      {{- fail "productionMode requires every CORS origin to use https://" -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if not .Values.networkPolicy.enabled -}}
+    {{- fail "productionMode requires networkPolicy.enabled=true; use a reviewed chart overlay only after rendering this baseline" -}}
+  {{- end -}}
+  {{- if empty .Values.secrets.existingSecret -}}
+    {{- fail "productionMode requires an externally managed secrets.existingSecret" -}}
+  {{- end -}}
+  {{- if or (empty .Values.image.digest) (empty .Values.frontend.image.digest) -}}
+    {{- fail "productionMode requires reviewed backend and frontend image digests" -}}
+  {{- end -}}
+  {{- if and .Values.malwaregraph.enabled (empty .Values.malwaregraph.image.digest) -}}
+    {{- fail "productionMode requires a reviewed MalwareGraph image digest when MalwareGraph is enabled" -}}
+  {{- end -}}
+  {{- if or (empty .Values.postgresql.image.digest) (not (contains "adversarygraph-postgres" .Values.postgresql.image.repository)) -}}
+    {{- fail "productionMode requires the remediated adversarygraph-postgres repository and reviewed digest" -}}
+  {{- end -}}
+  {{- if empty .Values.redis.imageDigest -}}
+    {{- fail "productionMode requires a reviewed Redis image digest" -}}
+  {{- end -}}
+{{- end -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "adversarygraph.fullname" . }}-config
+  labels:
+    {{- include "adversarygraph.labels" . | nindent 4 }}
+data:
+  AUTH_ENABLED: {{ .Values.config.authEnabled | quote }}
+  AUTH_SSO_MODE: {{ .Values.config.authSsoMode | quote }}
+  AUTH_DEFAULT_ROLE: {{ .Values.config.authDefaultRole | quote }}
+  AUTH_SESSION_MINUTES: {{ .Values.config.authSessionMinutes | quote }}
+  AUTH_PASSWORD_MIN_LENGTH: {{ .Values.config.authPasswordMinLength | quote }}
+  AUTH_PASSWORD_REQUIRE_UPPER: {{ .Values.config.authPasswordRequireUpper | quote }}
+  AUTH_PASSWORD_REQUIRE_LOWER: {{ .Values.config.authPasswordRequireLower | quote }}
+  AUTH_PASSWORD_REQUIRE_NUMBER: {{ .Values.config.authPasswordRequireNumber | quote }}
+  AUTH_PASSWORD_REQUIRE_SPECIAL: {{ .Values.config.authPasswordRequireSpecial | quote }}
+  AUTH_MFA_ENABLED: {{ .Values.config.authMfaEnabled | quote }}
+  SECURE_COOKIES: {{ .Values.config.secureCookies | quote }}
+  CORS_ALLOWED_ORIGINS: {{ .Values.config.corsAllowedOrigins | quote }}
+  ATTCK_DOMAINS: {{ .Values.config.attckDomains | quote }}
+  AUTO_IOC_FULL_SYNC_ON_STARTUP: {{ .Values.config.autoIocFullSyncOnStartup | quote }}
+  AUTO_THREATFOX_SYNC_DAYS: {{ .Values.config.autoThreatfoxSyncDays | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  OPENAI_MODEL: {{ .Values.config.openaiModel | quote }}
+  GEMINI_MODEL: {{ .Values.config.geminiModel | quote }}
+  MINIMAX_MODEL: {{ .Values.config.minimaxModel | quote }}
+  MINIMAX_BASE_URL: {{ .Values.config.minimaxBaseUrl | quote }}
+  LOCAL_LLM_BASE_URL: {{ .Values.config.localLlmBaseUrl | quote }}
+  LOCAL_LLM_MODEL: {{ .Values.config.localLlmModel | quote }}
+  THREAT_HUNTING_AI_ENABLED: {{ .Values.config.threatHuntingAiEnabled | quote }}
+  THREAT_HUNTING_AI_CLOUD_ENABLED: {{ .Values.config.threatHuntingAiCloudEnabled | quote }}
+  THREAT_HUNTING_AI_DEFAULT_PROVIDER: {{ .Values.config.threatHuntingAiDefaultProvider | quote }}
+  THREAT_HUNTING_AI_TIMEOUT_SECONDS: {{ .Values.config.threatHuntingAiTimeoutSeconds | quote }}
+  THREAT_HUNTING_AI_SOURCE_CHAR_LIMIT: {{ .Values.config.threatHuntingAiSourceCharLimit | quote }}
+  THREAT_HUNTING_AI_MAX_CANDIDATES: {{ .Values.config.threatHuntingAiMaxCandidates | quote }}
+  RAG_ENABLED: {{ .Values.config.ragEnabled | quote }}
+  RAG_EMBEDDING_ENABLED: {{ .Values.config.ragEmbeddingEnabled | quote }}
+  RAG_EMBEDDING_PROVIDER: {{ .Values.config.ragEmbeddingProvider | quote }}
+  RAG_EMBEDDING_MODEL: {{ .Values.config.ragEmbeddingModel | quote }}
+  RAG_EMBEDDING_DIMENSIONS: {{ .Values.config.ragEmbeddingDimensions | quote }}
+  RAG_EMBEDDING_BATCH_SIZE: {{ .Values.config.ragEmbeddingBatchSize | quote }}
+  RAG_VECTOR_MAX_COSINE_DISTANCE: {{ .Values.config.ragVectorMaxCosineDistance | quote }}
+  RAG_CHUNK_CHARS: {{ .Values.config.ragChunkChars | quote }}
+  RAG_CHUNK_OVERLAP_CHARS: {{ .Values.config.ragChunkOverlapChars | quote }}
+  RAG_DEFAULT_RESULT_LIMIT: {{ .Values.config.ragDefaultResultLimit | quote }}
+  RAG_MAX_CONTEXT_CHARS: {{ .Values.config.ragMaxContextChars | quote }}
+  RAG_RECONCILE_HOUR: {{ .Values.config.ragReconcileHour | quote }}
+  RAG_RECONCILE_MINUTE: {{ .Values.config.ragReconcileMinute | quote }}
+  RAG_TOMBSTONE_RETENTION_DAYS: {{ .Values.config.ragTombstoneRetentionDays | quote }}
+  RAG_ASSISTANCE_RETENTION_DAYS: {{ .Values.config.ragAssistanceRetentionDays | quote }}
+  RAG_RETENTION_BATCH_SIZE: {{ .Values.config.ragRetentionBatchSize | quote }}
+  RAG_RETENTION_MAX_BATCHES: {{ .Values.config.ragRetentionMaxBatches | quote }}
+  RAG_RETENTION_HOUR: {{ .Values.config.ragRetentionHour | quote }}
+  RAG_RETENTION_MINUTE: {{ .Values.config.ragRetentionMinute | quote }}
+  MALWAREGRAPH_MAX_UPLOAD_BYTES: {{ .Values.config.malwaregraphMaxUploadBytes | quote }}
+  ATTCK_DATA_DIR: /app/data/attck
+  LOG_DIR: /app/logs
+  MALWAREGRAPH_URL: http://{{ include "adversarygraph.fullname" . }}-malwaregraph:8100
+  MALWAREGRAPH_STORAGE_DIR: /malwaregraph-storage
+  DB_HOST: {{ include "adversarygraph.fullname" . }}-postgres
+  DB_PORT: "5432"

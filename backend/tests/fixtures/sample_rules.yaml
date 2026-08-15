@@ -1,0 +1,144 @@
+# Synthetic rules fixture for M2 unit tests.
+# Intentionally includes trailing spaces inside quoted values to test strip.
+
+rules:
+  - rule_id: "TEST_001 "
+    rule_name: "Dirty_Trailing_Space_Rule "
+    enabled: true
+    created_date: "2024-01-01"
+    modified_date: "2024-06-15"
+    event_count_30d: 5
+    offense_count_30d: 1
+    log_source: "Microsoft Windows Security Event Log"
+    criticality: "High "
+    mitre_techniques: ["T1059.001 ", "T1204.002"]
+    sysmon_required: false
+
+    full_rule_logic: |
+      Apply TEST_001_common:Dirty_Trailing_Space_Rule
+      on events which are detected by the Local system
+
+    building_blocks:
+      - bb_id: "BB_TEST_001"
+        bb_name: "Dirty_BB "
+        level: 1
+        depends_on_bb:
+          - "BB_eventtype:ProcessCreate "
+        own_conditions: |
+          proc_file_path IMATCHES '.\cmd.exe'
+        full_bb_logic: |
+          Apply BB_TEST_001
+          AND when proc_file_path IMATCHES '.\cmd.exe'
+
+      - bb_id: "BB_eventtype:ProcessCreate"
+        bb_name: "ProcessCreate"
+        level: 2
+        depends_on_bb:
+          - "BB_logsource:Windows_to_refactor"
+        own_conditions: |
+          event_id = 4688
+
+    effective_detection_logic: |
+      event_id = 4688 AND proc_file_path IMATCHES '.\cmd.exe'
+
+    bb_chain_summary: |
+      TEST_001
+        └─ BB_TEST_001
+
+    custom_fields:
+      - name: "proc_file_path "
+        internal_name: "proc_file_path"
+        event_id_context: "4688"
+        availability: "full "
+        adversary_control: "HIGH"
+        notes: "Test field with trailing space"
+      - name: "cmdline "
+        internal_name: "cmdline"
+        event_id_context: "4688"
+        availability: "partial "
+        adversary_control: "HIGH"
+        notes: "Test cmdline field"
+
+    reference_sets_used: []
+
+  - rule_id: "TEST_002"
+    rule_name: "Clean_Sysmon_Rule"
+    enabled: true
+    created_date: "2024-02-01"
+    modified_date: "2024-07-01"
+    event_count_30d: 0
+    offense_count_30d: 0
+    log_source: "Microsoft Sysmon"
+    criticality: "Medium"
+    mitre_techniques: ["T1218.010"]
+    sysmon_required: true
+
+    full_rule_logic: |
+      Apply TEST_002_common:Clean_Sysmon_Rule
+      on events which are detected by the Local system
+
+    building_blocks:
+      - bb_id: "BB_TEST_002"
+        bb_name: "Clean_BB"
+        level: 1
+        depends_on_bb: []
+        own_conditions: |
+          proc_file_path IMATCHES '.*\\regsvr32\.exe'
+
+    effective_detection_logic: |
+      proc_file_path IMATCHES '.*\\regsvr32\.exe'
+
+    bb_chain_summary: |
+      TEST_002
+        └─ BB_TEST_002
+
+    custom_fields:
+      - name: "proc_file_path"
+        internal_name: "proc_file_path"
+        event_id_context: "1"
+        availability: "full"
+        adversary_control: "HIGH"
+        notes: "Clean field"
+
+    reference_sets_used:
+      - "RMS_test_ref_set"
+
+  - rule_id: "TEST_003"
+    rule_name: "Cmdline_Partial_Rule"
+    enabled: false
+    created_date: "2024-03-01"
+    modified_date: "2024-03-01"
+    event_count_30d: 0
+    offense_count_30d: 0
+    log_source: "Microsoft Windows Security Event Log"
+    criticality: "Low"
+    mitre_techniques: ["T1033"]
+    sysmon_required: false
+
+    full_rule_logic: |
+      Apply TEST_003
+
+    building_blocks: []
+
+    effective_detection_logic: |
+      whoami
+
+    bb_chain_summary: ""
+
+    custom_fields:
+      - name: "cmdline"
+        internal_name: "cmdline"
+        event_id_context: "4688"
+        availability: "partial"
+        adversary_control: "HIGH"
+        notes: "Another cmdline partial"
+
+    reference_sets_used: []
+
+metadata:
+  total_rules: 100
+  fully_configured_rules: 3
+  export_date: "2024-01-01"
+
+fixes_applied: |
+  1. Test fix applied

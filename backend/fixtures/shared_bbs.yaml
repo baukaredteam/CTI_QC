@@ -1,0 +1,1325 @@
+# =============================================================
+# shared_bbs.yaml
+# Общие Building Blocks — загружаются один раз для всех правил
+# Агент читает этот файл ПЕРВЫМ перед анализом windows_rules.yaml
+# =============================================================
+
+metadata:
+  description: "Shared Building Blocks for QRadar rules — Windows log source"
+  log_source_family: "Microsoft Windows Security Event Log"
+  last_updated: "2026-07-11"
+  total_shared_bbs: 85
+  usage: |
+    В rules/*.yaml ссылайся на BB по bb_id.
+    Агент резолвит зависимости автоматически через depends_on_bb.
+
+# =============================================================
+# УРОВЕНЬ 3 — Log Source фильтры (базовые, без зависимостей)
+# =============================================================
+shared_building_blocks:
+
+  - bb_id: "BB_logsource:Windows_to_refactor"
+    bb_name: "Log source type - Windows_to_refactor"
+    level: 3
+    category: "log_source_filter"
+    depends_on_bb: []
+    own_conditions: |
+      Log Source Type = Microsoft Windows Security Event Log
+    full_bb_logic: |
+      Apply BB: Log source type - Windows_to_refactor
+      on events which are detected by the Local system
+      AND when the Log Source type is Microsoft Windows Security Event Log
+    notes: "Базовый фильтр по типу источника. Используется как первый BB в большинстве Windows правил."
+
+  - bb_id: "BB_logsource:Sysmon"
+    bb_name: "Log source type - Sysmon"
+    level: 3
+    category: "log_source_filter"
+    depends_on_bb: []
+    own_conditions: |
+      Log Source Type = Sysmon
+    full_bb_logic: |
+      Apply BB: Log source type - Sysmon
+      on events which are detected by the Local system
+      AND when the Log Source type is Sysmon
+    notes: "⚠ Требует установленного Sysmon. Если не установлен — правило слепое."
+
+# =============================================================
+# УРОВЕНЬ 2 — Event Type фильтры (зависят от Log Source BB)
+# =============================================================
+
+  - bb_id: "BB_eventtype:ProcessCreate"
+    bb_name: "ProcessCreate"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_id (custom) is any of 4688
+    full_bb_logic: |
+      Apply BB_eventtype:ProcessCreate
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when the event matches event_id (custom) is any of 4688
+    adversary_control: "LOW"
+    notes: "EventID 4688 — Process Creation. Chokepoint для process-based детекций."
+
+  - bb_id: "BB_eventtype:ProcessCreate_Sysmon"
+    bb_name: "ProcessCreate_Sysmon"
+    level: 2
+    category: "event_type_filter"
+    sysmon_required: true
+    depends_on_bb:
+      - "BB_logsource:Sysmon"
+    own_conditions: |
+      event_id (custom) is any of 1
+    full_bb_logic: |
+      Apply BB_eventtype:ProcessCreate_Sysmon
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Sysmon
+      AND when the event matches event_id (custom) is any of 1
+    adversary_control: "LOW"
+    notes: "Sysmon EventID 1. Даёт ParentProcess и CommandLine надёжнее чем 4688."
+
+  - bb_id: "BB_eventtype:Cmdline"
+    bb_name: "Cmdline"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_id (custom) is any of 4688
+      AND CommandLine IS NOT NULL
+    full_bb_logic: |
+      Apply BB_eventtype:Cmdline
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when the event matches event_id (custom) is any of 4688
+      AND when CommandLine IS NOT NULL AQL filter query
+    adversary_control: "HIGH"
+    availability: "partial"
+    notes: |
+      ⚠ CommandLine доступен только если включён GPO:
+      Computer Configuration → Policies → Audit Process Creation →
+      'Include command line in process creation events'
+      Без GPO — поле пустое, BB слепой.
+
+  - bb_id: "BB_eventype:UserUnlock_Windows"
+    bb_name: "UserUnlock_Windows"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_id (custom) is any of 4767
+    full_bb_logic: |
+      Apply BB_eventype:UserUnlock_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when the event matches event_id (custom) is any of 4767
+    adversary_control: "LOW"
+    notes: "EventID 4767 — A user account was unlocked. Используется в правилах множественной разблокировки."
+
+  - bb_id: "BB_eventype:UserPassReset"
+    bb_name: "UserPassReset"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event matches UserPassReset_Windows OR UserPassReset_AzureAD OR UserPassReset_Okta OR UserPassReset_Auth0 OR UserPassReset_SalesForce_CRM
+    full_bb_logic: |
+      Apply BB_eventype:UserPassReset
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when event matches UserPassReset_Windows OR UserPassReset_AzureAD OR UserPassReset_Okta OR UserPassReset_Auth0 OR UserPassReset_SalesForce_CRM
+    adversary_control: "LOW"
+    notes: "События сброса пароля из разных источников. Windows: 4724, 4723."
+
+  - bb_id: "BB_eventype:UserPassReset_Windows"
+    bb_name: "UserPassReset_Windows"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_id (custom) is any of 4724, 4723
+    full_bb_logic: |
+      Apply BB_eventype:UserPassReset_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when the event matches event_id (custom) is any of 4724, 4723
+    adversary_control: "LOW"
+    notes: "EventID 4724 — Attempt to reset account password. 4723 — Attempt to change account password."
+
+  - bb_id: "BB_eventype:UserCreate"
+    bb_name: "UserCreate"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_id (custom) is any of 4720
+    full_bb_logic: |
+      Apply BB_eventype:UserCreate
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when the event matches event_id (custom) is any of 4720
+    adversary_control: "LOW"
+    notes: "EventID 4720 — A user account was created."
+
+  - bb_id: "BB_eventype:GroupMemberAdd"
+    bb_name: "GroupMemberAdd"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event matches GroupMemberAdd_Windows OR GroupMemberAdd_O365 OR GroupMemberAdd_AzureAD OR GroupMemberAdd_Okta OR GroupMemberAdd_CTS
+    full_bb_logic: |
+      Apply BB_eventype:GroupMemberAdd
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when event matches GroupMemberAdd_Windows OR GroupMemberAdd_O365 OR GroupMemberAdd_AzureAD OR GroupMemberAdd_Okta OR GroupMemberAdd_CTS
+    adversary_control: "LOW"
+    notes: "События добавления в группу из разных источников. Windows: 4728, 4732, 4756."
+
+  - bb_id: "BB_eventype:GroupMemberAdd_Windows"
+    bb_name: "GroupMemberAdd_Windows"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_id (custom) is any of 4728, 4732, 4756
+    full_bb_logic: |
+      Apply BB_eventype:GroupMemberAdd_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when the event matches event_id (custom) is any of 4728, 4732, 4756
+    adversary_control: "LOW"
+    notes: "EventID 4728 — Member added to security-enabled global group. 4732 — local. 4756 — universal."
+
+  - bb_id: "BB_eventype:FileCreate"
+    bb_name: "FileCreate"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event matches FileCreate_Windows OR FileCreate_Sysmon
+    full_bb_logic: |
+      Apply BB_eventype:FileCreate
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when event matches FileCreate_Windows OR FileCreate_Sysmon
+    adversary_control: "LOW"
+    notes: "События создания файлов. Sysmon EventID 11 даёт больше деталей."
+
+  - bb_id: "BB_eventype:FileCreate_Sysmon"
+    bb_name: "FileCreate_Sysmon"
+    level: 2
+    category: "event_type_filter"
+    sysmon_required: true
+    depends_on_bb:
+      - "BB_logsource:Sysmon"
+    own_conditions: |
+      event_id (custom) is any of 11
+    full_bb_logic: |
+      Apply BB_eventype:FileCreate_Sysmon
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Sysmon
+      AND when the event matches event_id (custom) is any of 11
+    adversary_control: "LOW"
+    notes: "Sysmon EventID 11 — File created. Даёт полный путь и хэш файла."
+
+  - bb_id: "BB_eventype:WmiConsumerCreate"
+    bb_name: "WmiConsumerCreate"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event matches WmiConsumerCreate_Windows
+    full_bb_logic: |
+      Apply BB_eventype:WmiConsumerCreate
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when event matches WmiConsumerCreate_Windows
+    adversary_control: "LOW"
+    notes: "Создание WMI Consumer. Sysmon EventID 20."
+
+  - bb_id: "BB_eventype:ScheduledTaskCreate"
+    bb_name: "ScheduledTaskCreate"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event matches ScheduledTaskCreate_Windows
+    full_bb_logic: |
+      Apply BB_eventype:ScheduledTaskCreate
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when event matches ScheduledTaskCreate_Windows
+    adversary_control: "LOW"
+    notes: "Создание задачи планировщика. Windows EventID 4698."
+
+  - bb_id: "BB_eventype:ScheduledTaskChange"
+    bb_name: "ScheduledTaskChange"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event matches ScheduledTaskChange_Windows
+    full_bb_logic: |
+      Apply BB_eventype:ScheduledTaskChange
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when event matches ScheduledTaskChange_Windows
+    adversary_control: "LOW"
+    notes: "Изменение задачи планировщика. Windows EventID 4702."
+
+  - bb_id: "BB_eventype:WmiBindingCreate"
+    bb_name: "WmiBindingCreate"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event matches WmiBindingCreate_Windows
+    full_bb_logic: |
+      Apply BB_eventype:WmiBindingCreate
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when event matches WmiBindingCreate_Windows
+    adversary_control: "LOW"
+    notes: "Создание WMI Binding. Sysmon EventID 21."
+
+  - bb_id: "BB_eventype:ServiceInstall"
+    bb_name: "ServiceInstall"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event matches ServiceInstall_Windows
+    full_bb_logic: |
+      Apply BB_eventype:ServiceInstall
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when event matches ServiceInstall_Windows
+    adversary_control: "LOW"
+    notes: "Установка сервиса. Windows EventID 7045."
+
+  - bb_id: "BB_eventype:RegistryValueSetPersistence"
+    bb_name: "RegistryValueSetPersistence"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event matches RegistryValueSetPersistence_Windows
+    full_bb_logic: |
+      Apply BB_eventype:RegistryValueSetPersistence
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when event matches RegistryValueSetPersistence_Windows
+    adversary_control: "LOW"
+    notes: "Изменение значений реестра для persistence. Windows EventID 4657, Sysmon EventID 13."
+
+  - bb_id: "BB_eventype:Powershel_400"
+    bb_name: "Powershel_400"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event matches Powershel_400_Windows
+    full_bb_logic: |
+      Apply BB_eventype:Powershel_400
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when event matches Powershel_400_Windows
+    adversary_control: "LOW"
+    notes: "PowerShell EventID 400 — Pipeline execution started."
+
+  - bb_id: "BB_eventype:Execution_from_Run_RunOnce_Reg_Keys"
+    bb_name: "Execution_from_Run_RunOnce_Reg_Keys"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event matches Execution_from_Run_RunOnce_Reg_Keys_Windows
+    full_bb_logic: |
+      Apply BB_eventype:Execution_from_Run_RunOnce_Reg_Keys
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when event matches Execution_from_Run_RunOnce_Reg_Keys_Windows
+    adversary_control: "LOW"
+    notes: "Выполнение из Run/RunOnce ключей реестра."
+
+  - bb_id: "BB_eventype:ScriptExecution_Windows_1"
+    bb_name: "ScriptExecution_Windows_1"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_log_source (custom) is any of PowerShell
+      AND event_id (custom) is any of 800
+    full_bb_logic: |
+      Apply BB_eventype:ScriptExecution_Windows_1
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when event_log_source (custom) is any of PowerShell
+      AND when event_id (custom) is any of 800
+    adversary_control: "MED"
+    notes: "PowerShell EventID 800 — Pipeline execution. Script Block Logging."
+
+  - bb_id: "BB_eventype:ScriptExecution_Windows_2"
+    bb_name: "ScriptExecution_Windows_2"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_log_name (custom) is any of Microsoft-Windows-PowerShell/Operational
+      AND event_id (custom) is any of 4104
+    full_bb_logic: |
+      Apply BB_eventype:ScriptExecution_Windows_2
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when event_log_name (custom) is any of Microsoft-Windows-PowerShell/Operational
+      AND when event_id (custom) is any of 4104
+    adversary_control: "MED"
+    notes: "PowerShell EventID 4104 — Script Block Logging. Основной источник для PowerShell детекций."
+
+# =============================================================
+# УРОВЕНЬ 2 — Account Event BB
+# =============================================================
+
+  - bb_id: "BB_common:User_account_was_created_Windows"
+    bb_name: "User_account_was_created_Windows"
+    level: 2
+    category: "account_event"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_id (custom) is any of 4720
+    full_bb_logic: |
+      Apply BB_common:User_account_was_created_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when the event matches event_id (custom) is any of 4720
+    adversary_control: "LOW"
+    notes: "EventID 4720 — A user account was created. Chokepoint."
+
+  - bb_id: "BB_common:User_account_was_enabled_Windows"
+    bb_name: "User_account_was_enabled_Windows"
+    level: 2
+    category: "account_event"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_id (custom) is any of 4722
+    full_bb_logic: |
+      Apply BB_common:User_account_was_enabled_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when the event matches event_id (custom) is any of 4722
+    adversary_control: "LOW"
+    notes: "EventID 4722 — A user account was enabled."
+
+  - bb_id: "BB_common:User_was_Added_to_Privilege_Local_Group_Windows"
+    bb_name: "User_was_Added_to_Privilege_Local_Group_Windows"
+    level: 2
+    category: "account_event"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_id (custom) is any of 4732
+    full_bb_logic: |
+      Apply BB_common:User_was_Added_to_Privilege_Local_Group_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when the event matches event_id (custom) is any of 4732
+    adversary_control: "LOW"
+    notes: "EventID 4732 — A member was added to a security-enabled local group."
+
+  - bb_id: "BB_common:Successful_logon_type_2_Windows"
+    bb_name: "Successful_logon_type_2_Windows"
+    level: 2
+    category: "logon_event"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_id (custom) is any of 4624
+      AND proc_logon_type (custom) is any of 2
+    full_bb_logic: |
+      Apply BB_common:Successful_logon_type_2_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when the event matches event_id (custom) is any of 4624
+      AND when the event matches proc_logon_type (custom) is any of 2
+    adversary_control: "LOW"
+    notes: "EventID 4624 Logon Type 2 — Interactive logon. Локальный вход."
+
+  - bb_id: "BB_common:Successful_logon_type_10_Windows"
+    bb_name: "Successful_logon_type_10_Windows"
+    level: 2
+    category: "logon_event"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_id (custom) is any of 4624
+      AND proc_logon_type (custom) is any of 10
+    full_bb_logic: |
+      Apply BB_common:Successful_logon_type_10_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when the event matches event_id (custom) is any of 4624
+      AND when the event matches proc_logon_type (custom) is any of 10
+    adversary_control: "LOW"
+    notes: "EventID 4624 Logon Type 10 — Remote Interactive (RDP)."
+
+  - bb_id: "BB_common:Failed_TGT_Request_Windows"
+    bb_name: "Failed_TGT_Request_Windows"
+    level: 2
+    category: "kerberos_event"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_id (custom) is any of 4771
+    full_bb_logic: |
+      Apply BB_common:Failed_TGT_Request_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when the event matches event_id (custom) is any of 4771
+    adversary_control: "LOW"
+    notes: "EventID 4771 — Kerberos pre-authentication failed. Индикатор AS-REP Roasting."
+
+# =============================================================
+# УРОВЕНЬ 2 — Tool/Process BB (adversary-controlled)
+# =============================================================
+
+  - bb_id: "BB_common:Regsvr32_Tool_Windows"
+    bb_name: "Regsvr32_Tool_Windows"
+    level: 2
+    category: "tool_detection"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      proc_file_path IMATCHES '.*\\regsvr32\.exe'
+    full_bb_logic: |
+      Apply BB_common:Regsvr32_Tool_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when "proc_file_path" IMATCHES '.*\\regsvr32\.exe' AQL filter query
+    adversary_control: "HIGH"
+    availability: "full"
+    notes: |
+      proc_file_path = ProcessName. Adversary-controlled — HIGH.
+      Бинарник можно переименовать.
+      Chokepoint: COM server registration через LoadLibrary — нельзя обойти.
+
+  - bb_id: "BB_common:Mshta_Tool_Windows"
+    bb_name: "Mshta_Tool_Windows"
+    level: 2
+    category: "tool_detection"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      proc_file_path IMATCHES '.*\\mshta\.exe'
+    full_bb_logic: |
+      Apply BB_common:Mshta_Tool_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when "proc_file_path" IMATCHES '.*\\mshta\.exe' AQL filter query
+    adversary_control: "HIGH"
+    availability: "full"
+    notes: "mshta.exe — adversary-controlled. Rename = detection bypass."
+
+  - bb_id: "BB_common:Rundll32_Tool_Windows"
+    bb_name: "Rundll32_Tool_Windows"
+    level: 2
+    category: "tool_detection"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      proc_file_path IMATCHES '.*\\rundll32\.exe'
+    full_bb_logic: |
+      Apply BB_common:Rundll32_Tool_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when "proc_file_path" IMATCHES '.*\\rundll32\.exe' AQL filter query
+    adversary_control: "HIGH"
+    availability: "full"
+    notes: "rundll32.exe — adversary-controlled. Prone to process renaming."
+
+  - bb_id: "BB_common:Powershell_Windows"
+    bb_name: "Powershell_Windows"
+    level: 2
+    category: "tool_detection"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      proc_file_path IMATCHES '.*\\powershell\.exe'
+    full_bb_logic: |
+      Apply BB_common:Powershell_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when "proc_file_path" IMATCHES '.*\\powershell\.exe' AQL filter query
+    adversary_control: "HIGH"
+    availability: "full"
+    notes: |
+      Chokepoint: AMSI.dll загружается при каждом запуске PowerShell.
+      Лучше детектировать через ScriptBlock Logging (EventID 4104).
+
+  - bb_id: "BB_common:Powershell_All_ScriptBlock_Windows"
+    bb_name: "Powershell_All_ScriptBlock_Windows"
+    level: 2
+    category: "scriptblock_detection"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_id (custom) is any of 4104
+    full_bb_logic: |
+      Apply BB_common:Powershell_All_ScriptBlock_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when the event matches event_id (custom) is any of 4104
+    adversary_control: "MED"
+    availability: "partial"
+    notes: |
+      EventID 4104 — Script Block Logging.
+      ⚠ Требует GPO: Turn on PowerShell Script Block Logging.
+      Обфускация затрудняет но не устраняет детекцию.
+
+  - bb_id: "BB_common:Powershell_without_ScriptBlock_Windows"
+    bb_name: "Powershell_without_ScriptBlock_Windows"
+    level: 2
+    category: "scriptblock_detection"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      cmdline IMATCHES '.*(powershell|SyncAppvPublishingServer|pwsh\.exe|pwsh).*'
+      OR "proc_file_originalfilename" IMATCHES '(PowerShell.EXE|SyncAppvPublishingServer.exe)'
+      OR "proc_file_productname" = 'PowerShell Core 6'
+      OR "proc_file_description" = 'Windows PowerShell'
+      OR ("event_log_source" = 'PowerShell' AND "event_id" = '400')
+    full_bb_logic: |
+      Apply BB_common:Powershell_without_ScriptBlock_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when cmdline IMATCHES '.*(powershell|SyncAppvPublishingServer|pwsh\.exe|pwsh).*'
+      OR "proc_file_originalfilename" IMATCHES '(PowerShell.EXE|SyncAppvPublishingServer.exe)'
+      OR "proc_file_productname" = 'PowerShell Core 6'
+      OR "proc_file_description" = 'Windows PowerShell'
+      OR ("event_log_source" = 'PowerShell' AND "event_id" = '400') AQL filter query
+    adversary_control: "HIGH"
+    availability: "partial"
+    notes: "Детекция PowerShell без ScriptBlock Logging. Использует cmdline и process metadata."
+
+  - bb_id: "BB_common:Certutil_Tool_Windows"
+    bb_name: "Certutil_Tool_Windows"
+    level: 2
+    category: "tool_detection"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      proc_file_path IMATCHES '.*\\certutil\.exe'
+    full_bb_logic: |
+      Apply BB_common:Certutil_Tool_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when "proc_file_path" IMATCHES '.*\\certutil\.exe' AQL filter query
+    adversary_control: "HIGH"
+    availability: "full"
+    notes: "certutil.exe — adversary-controlled. Копирование под другим именем = bypass."
+
+  - bb_id: "BB_common:Process_Creation_Windows"
+    bb_name: "Process_Creation_Windows"
+    level: 2
+    category: "event_type_filter"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      (event_log_source = 'Microsoft-Windows-Security-Auditing' AND event_id = '4688')
+      OR (event_log_source = 'Microsoft-Windows-Sysmon' AND event_id = '1')
+    full_bb_logic: |
+      Apply BB_common:Process_Creation_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when (event_log_source = 'Microsoft-Windows-Security-Auditing' AND event_id = '4688')
+      OR (event_log_source = 'Microsoft-Windows-Sysmon' AND event_id = '1') AQL filter query
+    adversary_control: "LOW"
+    notes: "Алиас BB_eventtype:ProcessCreate. Используется в masquerading правилах."
+
+  - bb_id: "BB_common:MS_Office_Process_as_Parent_Windows"
+    bb_name: "MS_Office_Process_as_Parent_Windows"
+    level: 2
+    category: "parent_process"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      proc_p_file_path IMATCHES '.*\\excel\.exe'
+      OR proc_p_file_path IMATCHES '.*\\winword\.exe'
+      OR proc_p_file_path IMATCHES '.*\\powerpnt\.exe'
+      OR proc_p_file_path IMATCHES '.*\\mspub\.exe'
+      OR proc_p_file_path IMATCHES '.*\\visio\.exe'
+      OR proc_p_file_path IMATCHES '.*\\msaccess\.exe'
+      OR proc_p_file_path IMATCHES '.*\\foxitreader\.exe'
+      OR proc_p_file_path IMATCHES '.*\\foxitphantompdf\.exe'
+      OR proc_p_file_path IMATCHES '.*\\acrobat\.exe'
+      OR proc_p_file_path IMATCHES '.*\\acrord32\.exe'
+      OR proc_p_file_path IMATCHES '.*\\pdfxedit\.exe'
+      OR proc_p_file_path IMATCHES '.*\\foxit\sreader\.exe'
+      OR proc_p_file_path IMATCHES '.*\\sumatrapdf\.exe'
+      OR proc_p_file_path IMATCHES '.*\\foxit-reader\.exe'
+      OR proc_p_file_path IMATCHES '.*\\hwp\.exe'
+      OR proc_p_file_path IMATCHES '.*\\hcell\.exe'
+      OR proc_p_file_path IMATCHES '.*\\hshow\.exe'
+    full_bb_logic: |
+      Apply BB_common:MS_Office_Process_as_Parent_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when proc_p_file_path IMATCHES '.*\\excel\.exe'
+      OR proc_p_file_path IMATCHES '.*\\winword\.exe'
+      OR proc_p_file_path IMATCHES '.*\\powerpnt\.exe'
+      OR proc_p_file_path IMATCHES '.*\\mspub\.exe'
+      OR proc_p_file_path IMATCHES '.*\\visio\.exe'
+      OR proc_p_file_path IMATCHES '.*\\msaccess\.exe'
+      OR proc_p_file_path IMATCHES '.*\\foxitreader\.exe'
+      OR proc_p_file_path IMATCHES '.*\\foxitphantompdf\.exe'
+      OR proc_p_file_path IMATCHES '.*\\acrobat\.exe'
+      OR proc_p_file_path IMATCHES '.*\\acrord32\.exe'
+      OR proc_p_file_path IMATCHES '.*\\pdfxedit\.exe'
+      OR proc_p_file_path IMATCHES '.*\\foxit\sreader\.exe'
+      OR proc_p_file_path IMATCHES '.*\\sumatrapdf\.exe'
+      OR proc_p_file_path IMATCHES '.*\\foxit-reader\.exe'
+      OR proc_p_file_path IMATCHES '.*\\hwp\.exe'
+      OR proc_p_file_path IMATCHES '.*\\hcell\.exe'
+      OR proc_p_file_path IMATCHES '.*\\hshow\.exe' AQL filter query
+    adversary_control: "LOW"
+    notes: "Родительский процесс — офисное приложение или PDF reader. Индикатор malicious document."
+
+  - bb_id: "BB_common:Whoami_Tool_Windows"
+    bb_name: "Whoami_Tool_Windows"
+    level: 2
+    category: "tool_detection"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      proc_file_path IMATCHES '.*\\whoami\.exe'
+      OR proc_file_originalfilename IMATCHES 'whoami\.exe'
+    full_bb_logic: |
+      Apply BB_common:Whoami_Tool_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when "proc_file_path" IMATCHES '.*\\whoami\.exe'
+      OR "proc_file_originalfilename" IMATCHES 'whoami\.exe' AQL filter query
+    adversary_control: "HIGH"
+    availability: "full"
+    notes: "whoami.exe — adversary-controlled. Используется для reconnaissance после privilege escalation."
+
+  - bb_id: "BB_common:Run_as_System_Windows"
+    bb_name: "Run_as_System_Windows"
+    level: 2
+    category: "privilege_check"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      proc_usr_name = 'SYSTEM'
+      OR proc_usr_name = 'NT AUTHORITY\SYSTEM'
+    full_bb_logic: |
+      Apply BB_common:Run_as_System_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when proc_usr_name = 'SYSTEM'
+      OR proc_usr_name = 'NT AUTHORITY\SYSTEM' AQL filter query
+    adversary_control: "LOW"
+    notes: "Процесс запущен от имени SYSTEM. Индикатор privilege escalation."
+
+  - bb_id: "BB_common:Reg_Tool_Windows"
+    bb_name: "Reg_Tool_Windows"
+    level: 2
+    category: "tool_detection"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      cmdline IMATCHES '.*reg.*'
+      OR proc_file_originalfilename IMATCHES '.*reg\.exe.*'
+      OR proc_file_description IMATCHES '.*Registry\sConsole\sTool.*'
+    full_bb_logic: |
+      Apply BB_common:Reg_Tool_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when event matches BB_eventtype:Cmdline
+      AND when cmdline IMATCHES '.*reg.*'
+      OR proc_file_originalfilename IMATCHES '.*reg\.exe.*'
+      OR proc_file_description IMATCHES '.*Registry\sConsole\sTool.*' AQL filter query
+    adversary_control: "HIGH"
+    availability: "full"
+    notes: "reg.exe — adversary-controlled. Используется для дампа SAM/SYSTEM/SECURITY."
+
+  - bb_id: "BB_common:Remote_Svcctl_SMB_Pipe_Access_Windows"
+    bb_name: "Remote_Svcctl_SMB_Pipe_Access_Windows"
+    level: 2
+    category: "lateral_movement"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_id (custom) is any of 5145
+      AND NOT Source IP is 127.0.0.1, Source IP is 0.0.0.1
+      AND share_name (custom) is any of \\*\IPC$
+      AND file_name (custom) is any of svcctl
+    full_bb_logic: |
+      Apply BB_common:Remote_Svcctl_SMB_Pipe_Access_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when event_id (custom) is any of 5145
+      AND NOT Source IP is 127.0.0.1, Source IP is 0.0.0.1
+      AND share_name (custom) is any of \\*\IPC$
+      AND file_name (custom) is any of svcctl AQL filter query
+    adversary_control: "LOW"
+    notes: "EventID 5145 — Detailed File Share. Доступ к svcctl pipe = remote service creation."
+
+  - bb_id: "BB_common:Files_Credentials_Dumping_File"
+    bb_name: "Files_Credentials_Dumping_File"
+    level: 2
+    category: "file_detection"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      file_name IMATCHES '.*(sam|system|security|ntds\.dit|hashes\.txt|credentials\.txt).*'
+    full_bb_logic: |
+      Apply BB_common:Files_Credentials_Dumping_File
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when file_name IMATCHES '.*(sam|system|security|ntds\.dit|hashes\.txt|credentials\.txt).*' AQL filter query
+    adversary_control: "HIGH"
+    availability: "partial"
+    notes: "Файлы с учётными данными. Adversary может переименовать."
+
+  - bb_id: "BB_common:Files_Credentials_Dumping_File_Path"
+    bb_name: "Files_Credentials_Dumping_File_Path"
+    level: 2
+    category: "file_detection"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      file_path IMATCHES '.*(\\temp\\|\\tmp\\|\\appdata\\|\\downloads\\).*'
+    full_bb_logic: |
+      Apply BB_common:Files_Credentials_Dumping_File_Path
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when file_path IMATCHES '.*(\\temp\\|\\tmp\\|\\appdata\\|\\downloads\\).*' AQL filter query
+    adversary_control: "HIGH"
+    availability: "partial"
+    notes: "Путь к файлу с учётными данными. Temp/AppData = подозрительно."
+
+  - bb_id: "BB_common:Files_Credentials_Dumping_Proc_File_Path"
+    bb_name: "Files_Credentials_Dumping_Proc_File_Path"
+    level: 2
+    category: "process_detection"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      proc_file_path IMATCHES '.*(mimikatz|procdump|secretsdump|ntdsutil).*'
+    full_bb_logic: |
+      Apply BB_common:Files_Credentials_Dumping_Proc_File_Path
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when proc_file_path IMATCHES '.*(mimikatz|procdump|secretsdump|ntdsutil).*' AQL filter query
+    adversary_control: "HIGH"
+    availability: "partial"
+    notes: "Процесс для дампа учётных данных. Adversary-controlled."
+
+  - bb_id: "BB_common:Files_Credentials_Dumping_File_Versioninfo"
+    bb_name: "Files_Credentials_Dumping_File_Versioninfo"
+    level: 2
+    category: "file_detection"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      proc_file_description IMATCHES '.*(mimikatz|procdump|secretsdump).*'
+    full_bb_logic: |
+      Apply BB_common:Files_Credentials_Dumping_File_Versioninfo
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when proc_file_description IMATCHES '.*(mimikatz|procdump|secretsdump).*' AQL filter query
+    adversary_control: "MED"
+    availability: "partial"
+    notes: "Version info процесса. Adversary может очистить или изменить."
+
+  - bb_id: "BB_common:Files_Credentials_Dumping_File_Attributes"
+    bb_name: "Files_Credentials_Dumping_File_Attributes"
+    level: 2
+    category: "file_detection"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      file_attributes IMATCHES '.*(hidden|system).*'
+    full_bb_logic: |
+      Apply BB_common:Files_Credentials_Dumping_File_Attributes
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when file_attributes IMATCHES '.*(hidden|system).*' AQL filter query
+    adversary_control: "HIGH"
+    availability: "partial"
+    notes: "Атрибуты файла. Hidden/System = попытка скрыть."
+
+  - bb_id: "BB_common:Access_to_Admin_Share"
+    bb_name: "Access_to_Admin_Share"
+    level: 2
+    category: "lateral_movement"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_id (custom) is any of 5140, 5145
+      AND share_name (custom) IMATCHES '.*(C\$|ADMIN\$|IPC\$).*'
+    full_bb_logic: |
+      Apply BB_common:Access_to_Admin_Share
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when event_id (custom) is any of 5140, 5145
+      AND share_name (custom) IMATCHES '.*(C\$|ADMIN\$|IPC\$).*' AQL filter query
+    adversary_control: "LOW"
+    notes: "Доступ к административным шарам. Индикатор lateral movement."
+
+  - bb_id: "BB_common:Remotely_Executed_Process_Windows"
+    bb_name: "Remotely_Executed_Process_Windows"
+    level: 2
+    category: "lateral_movement"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      proc_usr_sid IMATCHES '.*S-1-5-18.*'
+      OR proc_usr_name IMATCHES '.*\$.*'
+    full_bb_logic: |
+      Apply BB_common:Remotely_Executed_Process_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when proc_usr_sid IMATCHES '.*S-1-5-18.*'
+      OR proc_usr_name IMATCHES '.*\$.*' AQL filter query
+    adversary_control: "LOW"
+    notes: "Процесс запущен удалённо. Индикатор PsExec, WMI, DCOM."
+
+  - bb_id: "BB_common:Process_Execution_With_Network_Logon_SID_In_Token_Windows"
+    bb_name: "Process_Execution_With_Network_Logon_SID_In_Token_Windows"
+    level: 2
+    category: "lateral_movement"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      proc_logon_type (custom) is any of 3
+    full_bb_logic: |
+      Apply BB_common:Process_Execution_With_Network_Logon_SID_In_Token_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when proc_logon_type (custom) is any of 3 AQL filter query
+    adversary_control: "LOW"
+    notes: "Logon Type 3 — Network logon. Индикатор remote execution."
+
+  - bb_id: "BB_common:Process_Execution_Via_WMI_Windows"
+    bb_name: "Process_Execution_Via_WMI_Windows"
+    level: 2
+    category: "lateral_movement"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      proc_p_file_path IMATCHES '.*\\wmiprvse\.exe'
+    full_bb_logic: |
+      Apply BB_common:Process_Execution_Via_WMI_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when proc_p_file_path IMATCHES '.*\\wmiprvse\.exe' AQL filter query
+    adversary_control: "LOW"
+    notes: "Родительский процесс — WMI Provider Host. Индикатор WMI lateral movement."
+
+  - bb_id: "BB_common:Well_Known_Lateral_Movement_COM_Object_Host_Processes_Windows"
+    bb_name: "Well_Known_Lateral_Movement_COM_Object_Host_Processes_Windows"
+    level: 2
+    category: "lateral_movement"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      proc_file_path IMATCHES '.*(mmc\.exe|explorer\.exe|svchost\.exe).*'
+    full_bb_logic: |
+      Apply BB_common:Well_Known_Lateral_Movement_COM_Object_Host_Processes_Windows
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when proc_file_path IMATCHES '.*(mmc\.exe|explorer\.exe|svchost\.exe).*' AQL filter query
+    adversary_control: "LOW"
+    notes: "COM object host процессы. Индикатор DCOM lateral movement."
+
+  - bb_id: "BB_common:Service_Installed_exclude_wellknow"
+    bb_name: "Service_Installed_exclude_wellknow"
+    level: 2
+    category: "persistence"
+    depends_on_bb:
+      - "BB_logsource:Windows_to_refactor"
+    own_conditions: |
+      event_id (custom) is any of 7045
+      AND NOT cmdline (custom) contains any of \ProgramData\Microsoft\Windows Defender\Definition Updates\
+      AND NOT cmdline (custom) contains all of [\Program Files or \Kaspersky Lab\NetworkAgent\]
+    full_bb_logic: |
+      Apply BB_common:Service_Installed_exclude_wellknow
+      on events which are detected by the Local system
+      AND when event matches BB: Log source type - Windows_to_refactor
+      AND when event_id (custom) is any of 7045
+      AND NOT cmdline (custom) contains any of \ProgramData\Microsoft\Windows Defender\Definition Updates\
+      AND NOT cmdline (custom) contains all of [\Program Files or \Kaspersky Lab\NetworkAgent\] AQL filter query
+    adversary_control: "LOW"
+    notes: "EventID 7045 — Service installed. Исключает легитимные сервисы."
+
+# =============================================================
+# УРОВЕНЬ 1 — Composite BB (комбинации нескольких BB)
+# =============================================================
+
+  - bb_id: "BB_0000100_common:Multiple_Account_Unlock_by_One_User_Windows"
+    bb_name: "Multiple_Account_Unlock_by_One_User_Windows"
+    level: 1
+    category: "composite"
+    depends_on_bb:
+      - "BB_eventype:UserUnlock_Windows"
+    own_conditions: |
+      at least 7 events with same proc_usr_name and different usr_tgt_name in 5 minutes
+    full_bb_logic: |
+      Apply BB_0000100_common:Multiple_Account_Unlock_by_One_User_Windows
+      on events which are detected by the Local system
+      AND when event matches BB_eventype:UserUnlock_Windows
+      AND when at least 7 events are seen with the same proc_usr_name and different usr_tgt_name in 5 minutes
+    adversary_control: "LOW"
+    notes: "Композитный BB. 7+ разблокировок разных аккаунтов одним пользователем за 5 минут."
+
+  - bb_id: "BB_0000200_common:Multiple_Account_Password_Reset_by_One_User_Windows"
+    bb_name: "Multiple_Account_Password_Reset_by_One_User_Windows"
+    level: 1
+    category: "composite"
+    depends_on_bb:
+      - "BB_eventype:UserPassReset"
+    own_conditions: |
+      at least 5 events with same proc_usr_name and different usr_tgt_name in 7 minutes
+      AND NOT usr_tgt_name IMATCHES 'HealthMailbox.*'
+      AND NOT proc_usr_name IMATCHES '.*\$$'
+    full_bb_logic: |
+      Apply BB_0000200_common:Multiple_Account_Password_Reset_by_One_User_Windows
+      on events which are detected by the Local system
+      AND when event matches BB_eventype:UserPassReset
+      AND when at least 5 events are seen with the same proc_usr_name and different usr_tgt_name in 7 minutes
+      AND NOT usr_tgt_name IMATCHES 'HealthMailbox.*'
+      AND NOT proc_usr_name IMATCHES '.*\$$' AQL filter query
+    adversary_control: "LOW"
+    notes: "Композитный BB. 5+ сбросов паролей одним пользователем за 7 минут."
+
+  - bb_id: "BB_0001000_common:Spawning_Cmd_by_MS_Office_App_Windows"
+    bb_name: "Spawning_Cmd_by_MS_Office_App_Windows"
+    level: 1
+    category: "composite"
+    depends_on_bb:
+      - "BB_common:Process_Creation_Windows"
+      - "BB_common:MS_Office_Process_as_Parent_Windows"
+    own_conditions: |
+      proc_file_path IMATCHES '.*\\cmd\.exe'
+      OR proc_file_originalfilename IMATCHES 'cmd\.exe'
+      OR proc_file_description IMATCHES 'Windows Command Processor'
+      OR cmdline IMATCHES '.*cmd\.exe.*'
+      OR cmdline IMATCHES '.*cmd\s.*'
+    full_bb_logic: |
+      Apply BB_0001000_common:Spawning_Cmd_by_MS_Office_App_Windows
+      on events which are detected by the Local system
+      AND when event matches BB_common:Process_Creation_Windows
+      AND when event matches BB_common:MS_Office_Process_as_Parent_Windows
+      AND when proc_file_path IMATCHES '.*\\cmd\.exe'
+      OR proc_file_originalfilename IMATCHES 'cmd\.exe'
+      OR proc_file_description IMATCHES 'Windows Command Processor'
+      OR cmdline IMATCHES '.*cmd\.exe.*'
+      OR cmdline IMATCHES '.*cmd\s.*' AQL filter query
+    adversary_control: "HIGH"
+    notes: "Композитный BB. Office app → cmd.exe. Индикатор malicious document."
+
+  - bb_id: "BB_0001100_common:Spawning_Powershell_by_MS_Office_App_Windows"
+    bb_name: "Spawning_Powershell_by_MS_Office_App_Windows"
+    level: 1
+    category: "composite"
+    depends_on_bb:
+      - "BB_common:Process_Creation_Windows"
+      - "BB_common:MS_Office_Process_as_Parent_Windows"
+      - "BB_common:Powershell_Windows"
+    own_conditions: ""
+    full_bb_logic: |
+      Apply BB_0001100_common:Spawning_Powershell_by_MS_Office_App_Windows
+      on events which are detected by the Local system
+      AND when event matches BB_common:Process_Creation_Windows
+      AND when event matches BB_common:MS_Office_Process_as_Parent_Windows
+      AND when event matches BB_common:Powershell_Windows
+    adversary_control: "HIGH"
+    notes: "Композитный BB. Office app → powershell.exe. Индикатор malicious document."
+
+  - bb_id: "BB_0002100_common:Whoami_Executed_as_System_Windows"
+    bb_name: "Whoami_Executed_as_System_Windows"
+    level: 1
+    category: "composite"
+    depends_on_bb:
+      - "BB_eventype:ProcessCreate"
+      - "BB_common:Whoami_Tool_Windows"
+      - "BB_common:Run_as_System_Windows"
+    own_conditions: |
+      NOT proc_p_file_path contains \Program Files\Palo Alto Networks\GlobalProtect\PanGpHip.exe
+      AND NOT cmdline contains /groups
+    full_bb_logic: |
+      Apply BB_0002100_common:Whoami_Executed_as_System_Windows
+      on events which are detected by the Local system
+      AND when event matches BB_eventype:ProcessCreate
+      AND when event matches BB_common:Whoami_Tool_Windows
+      AND when event matches BB_common:Run_as_System_Windows
+      AND NOT proc_p_file_path contains \Program Files\Palo Alto Networks\GlobalProtect\PanGpHip.exe
+      AND NOT cmdline contains /groups AQL filter query
+    adversary_control: "HIGH"
+    notes: "Композитный BB. whoami от SYSTEM. Индикатор privilege escalation."
+
+  - bb_id: "BB_0002400_common:Using_REG_to_Dump_Sensitive_Registry_Hives_Windows"
+    bb_name: "Using_REG_to_Dump_Sensitive_Registry_Hives_Windows"
+    level: 1
+    category: "composite"
+    depends_on_bb:
+      - "BB_common:Reg_Tool_Windows"
+    own_conditions: |
+      cmdline IMATCHES '.*\ssave\s.*'
+      AND (cmdline IMATCHES '.*\\sam.*' OR cmdline IMATCHES '.*\\security.*' OR cmdline IMATCHES '.*\\system[^32].*')
+    full_bb_logic: |
+      Apply BB_0002400_common:Using_REG_to_Dump_Sensitive_Registry_Hives_Windows
+      on events which are detected by the Local system
+      AND when event matches BB_common:Reg_Tool_Windows
+      AND when cmdline IMATCHES '.*\ssave\s.*'
+      AND when (cmdline IMATCHES '.*\\sam.*' OR cmdline IMATCHES '.*\\security.*' OR cmdline IMATCHES '.*\\system[^32].*') AQL filter query
+    adversary_control: "HIGH"
+    notes: "Композитный BB. reg.exe save SAM/SECURITY/SYSTEM. Credential dumping."
+
+  - bb_id: "BB_0018700_common:Execute_Remote_Script_via_Regsvr32_Windows"
+    bb_name: "Execute_Remote_Script_via_Regsvr32_Windows"
+    level: 1
+    category: "composite"
+    depends_on_bb:
+      - "BB_common:Regsvr32_Tool_Windows"
+      - "BB_eventtype:Cmdline"
+      - "BB_eventtype:ProcessCreate"
+      - "BB_eventtype:ProcessCreate_Sysmon"
+    own_conditions: |
+      cmdline IMATCHES '.*/i.*'
+      AND cmdline IMATCHES '.*http.*'
+    full_bb_logic: |
+      Apply BB_0018700_common:Execute_Remote_Script_via_Regsvr32_Windows
+      on events which are detected by the Local system
+      AND when event matches BB_common:Regsvr32_Tool_Windows
+      AND when event matches BB_eventtype:Cmdline
+      AND when event matches BB_eventtype:ProcessCreate
+      AND when event matches BB_eventtype:ProcessCreate_Sysmon
+      AND when cmdline IMATCHES '.*/i.*'
+      AND when cmdline IMATCHES '.*http.*' AQL filter query
+    adversary_control: "HIGH"
+    notes: "Композитный BB. Squiblydoo атака. regsvr32 /i http://... Индикатор malware delivery."
+
+  - bb_id: "BB_0018900_common:Using_Mshta_To_Run_hta_From_URL_Windows"
+    bb_name: "Using_Mshta_To_Run_hta_From_URL_Windows"
+    level: 1
+    category: "composite"
+    depends_on_bb:
+      - "BB_common:Mshta_Tool_Windows"
+      - "BB_eventtype:Cmdline"
+      - "BB_eventtype:ProcessCreate"
+      - "BB_eventtype:ProcessCreate_Sysmon"
+    own_conditions: |
+      cmdline IMATCHES '.*http.*'
+      AND cmdline IMATCHES '.*\.hta.*'
+    full_bb_logic: |
+      Apply BB_0018900_common:Using_Mshta_To_Run_hta_From_URL_Windows
+      on events which are detected by the Local system
+      AND when event matches BB_common:Mshta_Tool_Windows
+      AND when event matches BB_eventtype:Cmdline
+      AND when event matches BB_eventtype:ProcessCreate
+      AND when event matches BB_eventtype:ProcessCreate_Sysmon
+      AND when cmdline IMATCHES '.*http.*'
+      AND when cmdline IMATCHES '.*\.hta.*' AQL filter query
+    adversary_control: "HIGH"
+    notes: "Композитный BB. mshta http://...hta. Индикатор malware delivery."
+
+  - bb_id: "BB_0019000_common:Execute_Inline_Script_Using_Rundll32_Windows"
+    bb_name: "Execute_Inline_Script_Using_Rundll32_Windows"
+    level: 1
+    category: "composite"
+    depends_on_bb:
+      - "BB_common:Rundll32_Tool_Windows"
+      - "BB_eventtype:Cmdline"
+      - "BB_eventtype:ProcessCreate"
+      - "BB_eventtype:ProcessCreate_Sysmon"
+    own_conditions: |
+      cmdline IMATCHES '.*javascript:.*'
+      OR cmdline IMATCHES '.*vbscript:.*'
+    full_bb_logic: |
+      Apply BB_0019000_common:Execute_Inline_Script_Using_Rundll32_Windows
+      on events which are detected by the Local system
+      AND when event matches BB_common:Rundll32_Tool_Windows
+      AND when event matches BB_eventtype:Cmdline
+      AND when event matches BB_eventtype:ProcessCreate
+      AND when event matches BB_eventtype:ProcessCreate_Sysmon
+      AND when (cmdline IMATCHES '.*javascript:.*' OR cmdline IMATCHES '.*vbscript:.*') AQL filter query
+    adversary_control: "HIGH"
+    notes: "Композитный BB. rundll32 javascript:/vbscript:. Индикатор code execution."
+
+  - bb_id: "BB_0019100_common:Using_Rundll32_to_Invoke_Function_by_Ordinal_Windows"
+    bb_name: "Using_Rundll32_to_Invoke_Function_by_Ordinal_Windows"
+    level: 1
+    category: "composite"
+    depends_on_bb:
+      - "BB_common:Rundll32_Tool_Windows"
+      - "BB_eventtype:Cmdline"
+      - "BB_eventtype:ProcessCreate"
+      - "BB_eventtype:ProcessCreate_Sysmon"
+    own_conditions: |
+      cmdline IMATCHES '.*,#\d+.*'
+    full_bb_logic: |
+      Apply BB_0019100_common:Using_Rundll32_to_Invoke_Function_by_Ordinal_Windows
+      on events which are detected by the Local system
+      AND when event matches BB_common:Rundll32_Tool_Windows
+      AND when event matches BB_eventtype:Cmdline
+      AND when event matches BB_eventtype:ProcessCreate
+      AND when event matches BB_eventtype:ProcessCreate_Sysmon
+      AND when cmdline IMATCHES '.*,#\d+.*' AQL filter query
+    adversary_control: "HIGH"
+    notes: "Композитный BB. rundll32 malware.dll,#121. Индикатор code execution."
+
+  - bb_id: "BB_0021100_common:Execute_File_Named_Similar_to_System_Windows"
+    bb_name: "Execute_File_Named_Similar_to_System_Windows"
+    level: 1
+    category: "composite"
+    depends_on_bb:
+      - "BB_common:Process_Creation_Windows"
+    own_conditions: |
+      proc_file_name IMATCHES '(svchost|lsass|explorer|winlogon|services|smss|csrss|wininit|winmgmt)\.exe'
+      AND NOT proc_file_path IMATCHES '.*(\\Windows\\System32\\|\\Windows\\SysWOW64\\|\\Windows\\WinSxS\\).*'
+    full_bb_logic: |
+      Apply BB_0021100_common:Execute_File_Named_Similar_to_System_Windows
+      on events which are detected by the Local system
+      AND when event matches BB_common:Process_Creation_Windows
+      AND when proc_file_name IMATCHES '(svchost|lsass|explorer|winlogon|services|smss|csrss|wininit|winmgmt)\.exe'
+      AND NOT proc_file_path IMATCHES '.*(\\Windows\\System32\\|\\Windows\\SysWOW64\\|\\Windows\\WinSxS\\).*' AQL filter query
+    adversary_control: "HIGH"
+    notes: "Композитный BB. Masquerading — системное имя в нестандартном пути."
+
+  - bb_id: "BB_0021900_common:Suspicious_Powershell_Base64encoded_Windows"
+    bb_name: "Suspicious_Powershell_Base64encoded_Windows"
+    level: 1
+    category: "composite"
+    depends_on_bb:
+      - "BB_common:Powershell_Windows"
+      - "BB_common:Powershell_All_ScriptBlock_Windows"
+      - "BB_common:Powershell_without_ScriptBlock_Windows"
+    own_conditions: |
+      cmdline IMATCHES '.*FromBase64String.*'
+      OR cmdline IMATCHES '.*X509Enrollment.*'
+      OR cmdline IMATCHES '.*CBinaryConverte.*'
+    full_bb_logic: |
+      Apply BB_0021900_common:Suspicious_Powershell_Base64encoded_Windows
+      on events which are detected by the Local system
+      AND when event matches BB_common:Powershell_Windows
+      AND when (cmdline IMATCHES '.*FromBase64String.*' OR cmdline IMATCHES '.*X509Enrollment.*' OR cmdline IMATCHES '.*CBinaryConverte.*') AQL filter query
+    adversary_control: "HIGH"
+    notes: "Композитный BB. PowerShell base64 decode. Индикатор obfuscated code."
+
+  - bb_id: "BB_0022500_common:Suspicious_Certutil_Base64_Decode_Windows"
+    bb_name: "Suspicious_Certutil_Base64_Decode_Windows"
+    level: 1
+    category: "composite"
+    depends_on_bb:
+      - "BB_common:Certutil_Tool_Windows"
+      - "BB_eventtype:Cmdline"
+      - "BB_eventtype:ProcessCreate"
+      - "BB_eventtype:ProcessCreate_Sysmon"
+    own_conditions: |
+      cmdline IMATCHES '.*-decode.*'
+      OR cmdline IMATCHES '.*-decodehex.*'
+    full_bb_logic: |
+      Apply BB_0022500_common:Suspicious_Certutil_Base64_Decode_Windows
+      on events which are detected by the Local system
+      AND when event matches BB_common:Certutil_Tool_Windows
+      AND when event matches BB_eventtype:Cmdline
+      AND when event matches BB_eventtype:ProcessCreate
+      AND when event matches BB_eventtype:ProcessCreate_Sysmon
+      AND when (cmdline IMATCHES '.*-decode.*' OR cmdline IMATCHES '.*-decodehex.*') AQL filter query
+    adversary_control: "HIGH"
+    notes: "Композитный BB. certutil -decode. Индикатор payload decoding."
+
+  - bb_id: "BB_0022700_common:Tool_Ruler_was_Detected_Windows"
+    bb_name: "Tool_Ruler_was_Detected_Windows"
+    level: 1
+    category: "composite"
+    depends_on_bb: []
+    own_conditions: |
+      proc_file_name IMATCHES '.*ruler.*\.exe'
+      OR cmdline IMATCHES '.*ruler.*'
+    full_bb_logic: |
+      Apply BB_0022700_common:Tool_Ruler_was_Detected_Windows
+      on events which are detected by the Local system
+      AND when (proc_file_name IMATCHES '.*ruler.*\.exe' OR cmdline IMATCHES '.*ruler.*') AQL filter query
+    adversary_control: "HIGH"
+    notes: "Композитный BB. Ruler tool для Exchange атак."
+
+# =============================================================
+# REFERENCE SETS (используются в правилах для whitelist/blacklist)
+# =============================================================
+
+reference_sets:
+  - rs_id: "RS_0000600_common:Single_username_usage_on_multiple_hosts"
+    rs_name: "Single username usage on multiple hosts"
+    type: "AlphaNumeric"
+    case_sensitive: false
+    usage: "Whitelist для исключения легитимных пользователей из правил множественного входа."
+
+  - rs_id: "RS_common:List_of_Collectors_Processors_or_Brokers"
+    rs_name: "List of Collectors, Processors or Brokers"
+    type: "IP"
+    case_sensitive: false
+    usage: "Whitelist IP адресов QRadar collectors/processors."
+
+  - rs_id: "RMS_common:Customer_Local_Admins_Usernames"
+    rs_name: "Customer Local Admins Usernames"
+    type: "AlphaNumeric"
+    case_sensitive: false
+    usage: "Whitelist локальных администраторов клиента."
+
+  - rs_id: "RMS_0018400_common:Disabled_user_account_was_enabled_Windows_User_List"
+    rs_name: "Disabled user account was enabled - User List"
+    type: "AlphaNumeric"
+    case_sensitive: false
+    usage: "Whitelist пользователей, которых легитимно включают."
+
+  - rs_id: "RMS_0001300_common:Proc_Usr_Name_Whitelist"
+    rs_name: "Proc Usr Name Whitelist"
+    type: "AlphaNumeric"
+    case_sensitive: false
+    usage: "Whitelist сервисных аккаунтов для SAMR enumeration."
+
+  - rs_id: "RMS_common:Remote_Svcctl_SMB_Pipe_Access_Windows_Proc_Username_Whitelist"
+    rs_name: "Remote Svcctl SMB Pipe Access - Proc Username Whitelist"
+    type: "AlphaNumeric"
+    case_sensitive: false
+    usage: "Whitelist пользователей для remote service creation."
+
+  - rs_id: "RS: Exchange Server IPs"
+    rs_name: "Exchange Server IPs"
+    type: "IP"
+    case_sensitive: false
+    usage: "IP адреса Exchange серверов."
+
+  - rs_id: "RS: Exchange Usernames"
+    rs_name: "Exchange Usernames"
+    type: "AlphaNumeric"
+    case_sensitive: false
+    usage: "Учётные записи Exchange."
+
+# ===========================================================

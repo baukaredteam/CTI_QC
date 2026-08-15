@@ -1,0 +1,813 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: read
+
+concurrency:
+  # Serialize releases so registry publication and GitHub release creation for
+  # two semantic versions cannot interleave.
+  group: adversarygraph-release
+  cancel-in-progress: false
+
+jobs:
+  release-validation:
+    name: Non-skippable release security and deployment validation
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Release metadata
+        run: ./scripts/check-version-consistency.sh
+
+      - name: Backend dependency audit and SAST
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install pip-audit bandit
+          pip-audit -r requirements.txt
+          bandit -q -r app -x "tests,app/data" --severity-level medium --confidence-level medium
+
+      - name: Frontend dependency audit
+        working-directory: frontend
+        run: |
+          npm ci
+          npm audit --audit-level=high
+
+      - name: Anomaly docs build and dependency audit
+        working-directory: anomaly_detection/docs-site
+        run: |
+          npm ci
+          npm audit --audit-level=high
+          npm run build
+
+      - name: Validate Compose configurations
+        env:
+          DB_PASS: release_validation_db_password
+          REDIS_PASSWORD: release_validation_redis_password
+          RATE_LIMIT_PROXY_SECRET: release_validation_rate_limit_proxy_secret
+          CORS_ALLOWED_ORIGINS: https://adversarygraph.example.com
+          AUTH_ENABLED: "true"
+          AUTH_EXISTING_ADMIN_CONFIRMED: "true"
+          AUTO_IOC_FULL_SYNC_ON_STARTUP: "false"
+          ATTCK_DOMAINS: enterprise-attack
+          ADVERSARYGRAPH_POSTGRES_IMAGE: example.invalid/adversarygraph-postgres@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          ADVERSARYGRAPH_BACKEND_IMAGE: example.invalid/adversarygraph-backend@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          ADVERSARYGRAPH_FRONTEND_IMAGE: example.invalid/adversarygraph-frontend@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          ADVERSARYGRAPH_MALWAREGRAPH_IMAGE: example.invalid/adversarygraph-malwaregraph@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          ADVERSARYGRAPH_ATTACK_LAB_WEB_IMAGE: example.invalid/adversarygraph-attack-lab-web@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          ADVERSARYGRAPH_ATTACK_LAB_ENDPOINT_IMAGE: example.invalid/adversarygraph-attack-lab-endpoint@sha256:0000000000000000000000000000000000000000000000000000000000000000
+          ADVERSARYGRAPH_ANOMALY_DOCS_IMAGE: example.invalid/adversarygraph-anomaly-docs@sha256:0000000000000000000000000000000000000000000000000000000000000000
+        run: |
+          docker compose config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.dev.yml config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.local-ai.yml config --quiet
+          ./scripts/validate-production-env.sh
+          docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4 # v4
+
+      - name: Validate Helm chart
+        run: |
+          helm lint helm/adversarygraph
+          helm template adversarygraph helm/adversarygraph >/tmp/adversarygraph-rendered.yaml
+          helm template adversarygraph helm/adversarygraph --set malwaregraph.enabled=false >/tmp/adversarygraph-no-malwaregraph.yaml
+          helm template adversarygraph helm/adversarygraph \
+            --set 'malwaregraph.accessModes={ReadWriteMany}' \
+            --set malwaregraph.storageClassName=shared-rwx \
+            --set 'persistence.attckData.accessModes={ReadWriteMany}' \
+            --set persistence.attckData.storageClassName=shared-rwx \
+            --set 'persistence.logs.accessModes={ReadWriteMany}' \
+            --set persistence.logs.storageClassName=shared-rwx \
+            >/tmp/adversarygraph-shared-storage.yaml
+          helm template adversarygraph helm/adversarygraph \
+            --set-string config.productionMode=true \
+            --set postgresql.image.repository=example.invalid/adversarygraph-postgres \
+            --set-string postgresql.image.digest=sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --set-string image.digest=sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --set-string frontend.image.digest=sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            --set-string malwaregraph.image.digest=sha256:0000000000000000000000000000000000000000000000000000000000000000 \
+            >/tmp/adversarygraph-production.yaml
+          helm template adversarygraph helm/adversarygraph \
+            --set secrets.existingSecret= \
+            --set secrets.dbPassword=helm_validation_db_password \
+            --set secrets.redisPassword=helm_validation_redis_password \
+            --set secrets.rateLimitProxySecret=helm_validation_rate_limit_proxy_secret \
+            --set secrets.authBootstrapAdminPassword=helm_validation_bootstrap_password \
+            >/tmp/adversarygraph-managed-secret.yaml
+          if helm template adversarygraph helm/adversarygraph --set secrets.existingSecret= >/dev/null 2>&1; then
+            echo "Helm chart accepted missing managed credentials." >&2
+            exit 1
+          fi
+          if helm template adversarygraph helm/adversarygraph --set-string config.productionMode=true >/dev/null 2>&1; then
+            echo "Helm chart accepted production mode without release image digests." >&2
+            exit 1
+          fi
+
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  pinned-stack-scan:
+    name: Pinned stack scan (${{ matrix.image.name }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - name: redis
+            ref: redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
+          - name: busybox-tools
+            ref: busybox:1.36@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
+          - name: anomaly-docs-nginx
+            ref: nginx:stable-alpine@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46
+    steps:
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ matrix.image.ref }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+  release:
+    name: Build and publish release
+    runs-on: ubuntu-latest
+    needs: [release-validation, pinned-stack-scan]
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(tr -d '[:space:]' < VERSION)"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "VERSION must contain semantic X.Y.Z, got '$version'." >&2
+            exit 1
+          fi
+          if [[ "${GITHUB_REF_TYPE:-}" != "tag" ]]; then
+            echo "Release publication is allowed only from a version tag." >&2
+            exit 1
+          fi
+          if [[ "${GITHUB_REF_NAME:-}" != "v$version" ]]; then
+            echo "Release tag '${GITHUB_REF_NAME:-}' does not match VERSION '$version'." >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Verify remote release tag target
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --force origin "refs/tags/${RELEASE_TAG}"
+          remote_tag_commit="$(git rev-parse 'FETCH_HEAD^{commit}')"
+          if [[ "$remote_tag_commit" != "$EXPECTED_SHA" ]]; then
+            echo "Remote tag ${RELEASE_TAG} resolves to ${remote_tag_commit}, not workflow commit ${EXPECTED_SHA}." >&2
+            exit 1
+          fi
+
+      - name: Verify immutable release tag rulesets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          ruleset_dir="$(mktemp -d)"
+          trap 'rm -rf "$ruleset_dir"' EXIT
+          mapfile -t ruleset_ids < <(
+            gh api --paginate \
+              "repos/${GITHUB_REPOSITORY}/rulesets?includes_parents=true" \
+              --jq '.[] | select(.target == "tag" and .enforcement == "active") | .id'
+          )
+          if [[ "${#ruleset_ids[@]}" -eq 0 ]]; then
+            echo "No active tag ruleset protects refs/tags/${RELEASE_TAG}." >&2
+            exit 1
+          fi
+          ruleset_files=()
+          for ruleset_id in "${ruleset_ids[@]}"; do
+            ruleset_file="${ruleset_dir}/${ruleset_id}.json"
+            gh api "repos/${GITHUB_REPOSITORY}/rulesets/${ruleset_id}" > "$ruleset_file"
+            ruleset_files+=("$ruleset_file")
+          done
+          python3 scripts/verify-release-tag-rulesets.py \
+            "refs/tags/${RELEASE_TAG}" "${ruleset_files[@]}"
+
+      - name: Protect published release and classify draft recovery
+        id: release_state
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          lookup_log="$(mktemp)"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>"$lookup_log"; then
+            is_draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
+            if [[ "$is_draft" != "true" ]]; then
+              rm -f "$lookup_log"
+              echo "Release $RELEASE_TAG is already published; refusing to modify it." >&2
+              exit 1
+            fi
+            echo "resume_draft=true" >> "$GITHUB_OUTPUT"
+            echo "Release $RELEASE_TAG is a draft; it must match the regenerated release exactly before recovery."
+          elif grep -Fqi 'release not found' "$lookup_log"; then
+            echo "resume_draft=false" >> "$GITHUB_OUTPUT"
+            echo "No existing GitHub release found for $RELEASE_TAG; the workflow will create a draft after image publication."
+          else
+            cat "$lookup_log" >&2
+            rm -f "$lookup_log"
+            echo "GitHub release lookup failed ambiguously; refusing to publish." >&2
+            exit 1
+          fi
+          rm -f "$lookup_log"
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Version consistency
+        run: ./scripts/check-version-consistency.sh
+
+      - name: Backend tests
+        working-directory: backend
+        env:
+          DB_PASS: ci_test_password
+          LOG_DIR: /tmp/adversarygraph-test-logs
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          PYTHONPATH=. python -m pytest -q
+
+      - name: Validate OpenAPI and frontend API contracts
+        env:
+          DB_PASS: ci_test_password
+          LOG_DIR: /tmp/adversarygraph-test-logs
+        run: ./scripts/check-api-contracts.py
+
+      - name: Frontend build and lint
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run build
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Build PostgreSQL release image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: docker/postgres/Dockerfile
+          push: false
+          load: true
+          pull: true
+          platforms: linux/amd64
+          no-cache: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/adversarygraph-postgres:${{ steps.version.outputs.version }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Build backend release image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: backend
+          push: false
+          load: true
+          pull: true
+          platforms: linux/amd64
+          no-cache: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/adversarygraph-backend:${{ steps.version.outputs.version }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Build frontend release image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: frontend
+          push: false
+          load: true
+          pull: true
+          platforms: linux/amd64
+          no-cache: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/adversarygraph-frontend:${{ steps.version.outputs.version }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Build MalwareGraph release image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: docker/malwaregraph/Dockerfile
+          push: false
+          load: true
+          pull: true
+          platforms: linux/amd64
+          no-cache: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/adversarygraph-malwaregraph:${{ steps.version.outputs.version }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Build attack lab web release image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: docker/attack-lab-web/Dockerfile
+          push: false
+          load: true
+          pull: true
+          platforms: linux/amd64
+          no-cache: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/adversarygraph-attack-lab-web:${{ steps.version.outputs.version }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Build attack lab endpoint release image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: docker/attack-lab-endpoint/Dockerfile
+          push: false
+          load: true
+          pull: true
+          platforms: linux/amd64
+          no-cache: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/adversarygraph-attack-lab-endpoint:${{ steps.version.outputs.version }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Build anomaly documentation release image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          file: anomaly_detection/docs-site/Dockerfile
+          push: false
+          load: true
+          pull: true
+          platforms: linux/amd64
+          no-cache: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/adversarygraph-anomaly-docs:${{ steps.version.outputs.version }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.version.outputs.version }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+
+      - name: Log in to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Bind publication candidates to fresh source builds
+        id: publish_ids
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          REGISTRY_OWNER: ${{ github.repository_owner }}
+          EXPECTED_REVISION: ${{ github.sha }}
+          EXPECTED_SOURCE: https://github.com/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          images=(
+            "postgres:adversarygraph-postgres"
+            "backend:adversarygraph-backend"
+            "frontend:adversarygraph-frontend"
+            "malwaregraph:adversarygraph-malwaregraph"
+            "attack_lab_web:adversarygraph-attack-lab-web"
+            "attack_lab_endpoint:adversarygraph-attack-lab-endpoint"
+            "anomaly_docs:adversarygraph-anomaly-docs"
+          )
+          for item in "${images[@]}"; do
+            key="${item%%:*}"
+            image="${item#*:}"
+            repository="ghcr.io/${REGISTRY_OWNER}/${image}"
+            version_ref="${repository}:${RELEASE_VERSION}"
+            fresh_id="$(docker image inspect --format '{{.Id}}' "$version_ref")"
+            pull_log="$(mktemp)"
+            if docker pull "$version_ref" >"$pull_log" 2>&1; then
+              existing_id="$(docker image inspect --format '{{.Id}}' "$version_ref")"
+              if [[ "$existing_id" != "$fresh_id" ]]; then
+                cat "$pull_log" >&2
+                rm -f "$pull_log"
+                echo "Existing version tag differs from the fresh source build: $version_ref" >&2
+                echo "Refusing label-only recovery; remove the partial registry version after review, then rerun." >&2
+                exit 1
+              fi
+              echo "Existing version tag exactly matches the fresh source build: $version_ref"
+            elif grep -Eqi 'manifest unknown|no such manifest|not found' "$pull_log"; then
+              echo "No existing version artifact; using the freshly built candidate: $version_ref"
+            else
+              cat "$pull_log" >&2
+              rm -f "$pull_log"
+              echo "Registry lookup failed without a definitive not-found response; refusing to publish." >&2
+              exit 1
+            fi
+            rm -f "$pull_log"
+
+            revision="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$version_ref")"
+            version="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$version_ref")"
+            source="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.source" }}' "$version_ref")"
+            if [[ "$revision" != "$EXPECTED_REVISION" || "$version" != "$RELEASE_VERSION" || "$source" != "$EXPECTED_SOURCE" ]]; then
+              echo "Fresh candidate metadata does not match this release: $version_ref" >&2
+              exit 1
+            fi
+            candidate_id="$(docker image inspect --format '{{.Id}}' "$version_ref")"
+            if [[ "$candidate_id" != "$fresh_id" ]]; then
+              echo "Candidate changed while resolving registry state: $version_ref" >&2
+              exit 1
+            fi
+            echo "$key=$fresh_id" >> "$GITHUB_OUTPUT"
+          done
+
+      - name: Scan PostgreSQL publication candidate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.publish_ids.outputs.postgres }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Scan backend publication candidate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.publish_ids.outputs.backend }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Scan frontend publication candidate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.publish_ids.outputs.frontend }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Scan MalwareGraph publication candidate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.publish_ids.outputs.malwaregraph }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Scan attack lab web publication candidate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.publish_ids.outputs.attack_lab_web }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Scan attack lab endpoint publication candidate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.publish_ids.outputs.attack_lab_endpoint }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Scan anomaly documentation publication candidate
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ steps.publish_ids.outputs.anomaly_docs }}
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+
+      - name: Publish scanned release images
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          REGISTRY_OWNER: ${{ github.repository_owner }}
+          POSTGRES_IMAGE_ID: ${{ steps.publish_ids.outputs.postgres }}
+          BACKEND_IMAGE_ID: ${{ steps.publish_ids.outputs.backend }}
+          FRONTEND_IMAGE_ID: ${{ steps.publish_ids.outputs.frontend }}
+          MALWAREGRAPH_IMAGE_ID: ${{ steps.publish_ids.outputs.malwaregraph }}
+          ATTACK_LAB_WEB_IMAGE_ID: ${{ steps.publish_ids.outputs.attack_lab_web }}
+          ATTACK_LAB_ENDPOINT_IMAGE_ID: ${{ steps.publish_ids.outputs.attack_lab_endpoint }}
+          ANOMALY_DOCS_IMAGE_ID: ${{ steps.publish_ids.outputs.anomaly_docs }}
+        run: |
+          set -euo pipefail
+          declare -A expected_ids=(
+            [adversarygraph-postgres]="$POSTGRES_IMAGE_ID"
+            [adversarygraph-backend]="$BACKEND_IMAGE_ID"
+            [adversarygraph-frontend]="$FRONTEND_IMAGE_ID"
+            [adversarygraph-malwaregraph]="$MALWAREGRAPH_IMAGE_ID"
+            [adversarygraph-attack-lab-web]="$ATTACK_LAB_WEB_IMAGE_ID"
+            [adversarygraph-attack-lab-endpoint]="$ATTACK_LAB_ENDPOINT_IMAGE_ID"
+            [adversarygraph-anomaly-docs]="$ANOMALY_DOCS_IMAGE_ID"
+          )
+          declare -A manifest_keys=(
+            [adversarygraph-postgres]="ADVERSARYGRAPH_POSTGRES_IMAGE"
+            [adversarygraph-backend]="ADVERSARYGRAPH_BACKEND_IMAGE"
+            [adversarygraph-frontend]="ADVERSARYGRAPH_FRONTEND_IMAGE"
+            [adversarygraph-malwaregraph]="ADVERSARYGRAPH_MALWAREGRAPH_IMAGE"
+            [adversarygraph-attack-lab-web]="ADVERSARYGRAPH_ATTACK_LAB_WEB_IMAGE"
+            [adversarygraph-attack-lab-endpoint]="ADVERSARYGRAPH_ATTACK_LAB_ENDPOINT_IMAGE"
+            [adversarygraph-anomaly-docs]="ADVERSARYGRAPH_ANOMALY_DOCS_IMAGE"
+          )
+          images=(
+            adversarygraph-postgres
+            adversarygraph-backend
+            adversarygraph-frontend
+            adversarygraph-malwaregraph
+            adversarygraph-attack-lab-web
+            adversarygraph-attack-lab-endpoint
+            adversarygraph-anomaly-docs
+          )
+          for image in "${images[@]}"; do
+            repository="ghcr.io/${REGISTRY_OWNER}/${image}"
+            version_ref="${repository}:${RELEASE_VERSION}"
+            expected_id="${expected_ids[$image]}"
+            version_id="$(docker image inspect --format '{{.Id}}' "$version_ref")"
+            if [[ "$version_id" != "$expected_id" ]]; then
+              echo "Refusing to publish an image that differs from its scanned local ID: ${repository}." >&2
+              exit 1
+            fi
+          done
+          for image in "${images[@]}"; do
+            repository="ghcr.io/${REGISTRY_OWNER}/${image}"
+            version_ref="${repository}:${RELEASE_VERSION}"
+            docker push "$version_ref"
+          done
+
+          anonymous_docker_config="$(mktemp -d)"
+          trap 'rm -rf -- "$anonymous_docker_config"' EXIT
+          resolve_anonymous_digest() {
+            local ref="$1"
+            local attempt
+            local digest
+            local output
+            for attempt in 1 2 3 4 5 6; do
+              if output="$(DOCKER_CONFIG="$anonymous_docker_config" docker buildx imagetools inspect "$ref" 2>/dev/null)"; then
+                digest="$(awk '$1 == "Digest:" {print $2; exit}' <<<"$output")"
+                if [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+                  printf '%s\n' "$digest"
+                  return 0
+                fi
+              fi
+              sleep 5
+            done
+            DOCKER_CONFIG="$anonymous_docker_config" docker buildx imagetools inspect "$ref" >&2 || true
+            echo "::error::${ref} is not anonymously readable with a valid digest. Make the GHCR package public, then rerun this tag workflow." >&2
+            return 1
+          }
+
+          # Resolve every public version tag once, then inspect that immutable
+          # digest and bind it to the scanned local image ID. The release asset
+          # is written from these verified digests, never from a later mutable
+          # tag lookup. Shared `latest` tags are intentionally not published:
+          # a seven-image family cannot be advanced atomically.
+          : > adversarygraph-images.env
+          declare -A published_digests=()
+          for image in "${images[@]}"; do
+            repository="ghcr.io/${REGISTRY_OWNER}/${image}"
+            version_ref="${repository}:${RELEASE_VERSION}"
+            digest="$(resolve_anonymous_digest "$version_ref")"
+            immutable_ref="${repository}@${digest}"
+            raw_manifest="$(mktemp)"
+            if ! DOCKER_CONFIG="$anonymous_docker_config" docker buildx imagetools inspect --raw "$immutable_ref" >"$raw_manifest"; then
+              rm -f "$raw_manifest"
+              echo "Could not inspect immutable public manifest ${immutable_ref}." >&2
+              exit 1
+            fi
+            remote_config_id="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("config", {}).get("digest", ""))' "$raw_manifest")"
+            rm -f "$raw_manifest"
+            if [[ "$remote_config_id" != "${expected_ids[$image]}" ]]; then
+              echo "Public manifest ${immutable_ref} does not contain the scanned image ID ${expected_ids[$image]}." >&2
+              exit 1
+            fi
+            published_digests[$image]="$digest"
+            printf '%s=%s\n' "${manifest_keys[$image]}" "$immutable_ref" >> adversarygraph-images.env
+          done
+
+          # Catch any concurrent/manual movement of a semantic version tag
+          # before the GitHub release is created. The attached deployment file
+          # remains digest-pinned even if a registry tag is changed later.
+          for image in "${images[@]}"; do
+            repository="ghcr.io/${REGISTRY_OWNER}/${image}"
+            observed_digest="$(resolve_anonymous_digest "${repository}:${RELEASE_VERSION}")"
+            if [[ "$observed_digest" != "${published_digests[$image]}" ]]; then
+              echo "Version tag moved during publication: ${repository}:${RELEASE_VERSION}." >&2
+              exit 1
+            fi
+          done
+          cat adversarygraph-images.env >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Recheck remote release tag target after image publication
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --force origin "refs/tags/${RELEASE_TAG}"
+          remote_tag_commit="$(git rev-parse 'FETCH_HEAD^{commit}')"
+          if [[ "$remote_tag_commit" != "$EXPECTED_SHA" ]]; then
+            echo "Remote tag ${RELEASE_TAG} moved during publication." >&2
+            exit 1
+          fi
+
+      - name: Create or verify the draft GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          RESUME_DRAFT: ${{ steps.release_state.outputs.resume_draft }}
+        run: |
+          set -euo pipefail
+          release_name="AdversaryGraph v${RELEASE_VERSION}"
+          notes_file="docs/release-notes/v${RELEASE_VERSION}.md"
+
+          if [[ "$RESUME_DRAFT" == "true" ]]; then
+            is_draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
+            is_prerelease="$(gh release view "$RELEASE_TAG" --json isPrerelease --jq '.isPrerelease')"
+            actual_name="$(gh release view "$RELEASE_TAG" --json name --jq '.name')"
+            actual_body="$(gh release view "$RELEASE_TAG" --json body --jq '.body')"
+            expected_body="$(cat "$notes_file")"
+            asset_names="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets | map(.name) | sort | join("\n")')"
+            if [[ "$is_draft" != "true" || "$is_prerelease" != "false" || "$actual_name" != "$release_name" || "$actual_body" != "$expected_body" ]]; then
+              echo "Existing draft metadata does not exactly match this release; refusing to modify it." >&2
+              exit 1
+            fi
+            if [[ "$asset_names" != "adversarygraph-images.env" ]]; then
+              echo "Existing draft assets do not exactly match the expected manifest-only draft." >&2
+              exit 1
+            fi
+            draft_dir="$(mktemp -d)"
+            trap 'rm -rf "$draft_dir"' EXIT
+            gh release download "$RELEASE_TAG" \
+              --pattern adversarygraph-images.env \
+              --dir "$draft_dir"
+            cmp adversarygraph-images.env "$draft_dir/adversarygraph-images.env"
+            echo "Existing draft exactly matches the regenerated release; continuing without modifying it."
+            exit 0
+          fi
+
+          lookup_log="$(mktemp)"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>"$lookup_log"; then
+            rm -f "$lookup_log"
+            echo "Release $RELEASE_TAG already exists; refusing to modify either a draft or a published release." >&2
+            exit 1
+          elif grep -Fqi 'release not found' "$lookup_log"; then
+            rm -f "$lookup_log"
+          else
+            cat "$lookup_log" >&2
+            rm -f "$lookup_log"
+            echo "GitHub release lookup failed ambiguously; refusing to create a release." >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" adversarygraph-images.env \
+            --verify-tag \
+            --draft \
+            --title "$release_name" \
+            --notes-file "$notes_file"
+
+      - name: Verify manifest asset and publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          temp_dir="$(mktemp -d)"
+          download_dir="${temp_dir}/download"
+          anonymous_docker_config="${temp_dir}/docker"
+          mkdir -p "$download_dir" "$anonymous_docker_config"
+          trap 'rm -rf "$temp_dir"' EXIT
+          gh release download "$RELEASE_TAG" \
+            --pattern adversarygraph-images.env \
+            --dir "$download_dir" \
+            --clobber
+          cmp adversarygraph-images.env "$download_dir/adversarygraph-images.env"
+
+          resolve_anonymous_digest() {
+            local ref="$1"
+            local attempt
+            local digest
+            local output
+            for attempt in 1 2 3 4 5 6; do
+              if output="$(DOCKER_CONFIG="$anonymous_docker_config" docker buildx imagetools inspect "$ref" 2>/dev/null)"; then
+                digest="$(awk '$1 == "Digest:" {print $2; exit}' <<<"$output")"
+                if [[ "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+                  printf '%s\n' "$digest"
+                  return 0
+                fi
+              fi
+              sleep 5
+            done
+            DOCKER_CONFIG="$anonymous_docker_config" docker buildx imagetools inspect "$ref" >&2 || true
+            return 1
+          }
+
+          # Fail closed if a semantic-version tag moved after the scanned
+          # digest set was recorded but before the public release is exposed.
+          while IFS='=' read -r key immutable_ref; do
+            if [[ -z "$key" || ! "$immutable_ref" =~ @sha256:[a-f0-9]{64}$ ]]; then
+              echo "Malformed release image manifest entry: ${key}=${immutable_ref}" >&2
+              exit 1
+            fi
+            repository="${immutable_ref%@*}"
+            expected_digest="${immutable_ref##*@}"
+            observed_digest="$(resolve_anonymous_digest "${repository}:${RELEASE_VERSION}")"
+            if [[ "$observed_digest" != "$expected_digest" ]]; then
+              echo "Version tag no longer matches the verified release digest: ${repository}:${RELEASE_VERSION}." >&2
+              exit 1
+            fi
+          done < adversarygraph-images.env
+          # Revalidate the remote tag and every draft field after the registry
+          # checks, immediately before making the release public.
+          git fetch --no-tags --force origin "refs/tags/${RELEASE_TAG}"
+          remote_tag_commit="$(git rev-parse 'FETCH_HEAD^{commit}')"
+          if [[ "$remote_tag_commit" != "$EXPECTED_SHA" ]]; then
+            echo "Remote tag ${RELEASE_TAG} moved before GitHub release publication." >&2
+            exit 1
+          fi
+          is_draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq '.isDraft')"
+          is_prerelease="$(gh release view "$RELEASE_TAG" --json isPrerelease --jq '.isPrerelease')"
+          actual_name="$(gh release view "$RELEASE_TAG" --json name --jq '.name')"
+          actual_body="$(gh release view "$RELEASE_TAG" --json body --jq '.body')"
+          expected_body="$(cat "docs/release-notes/v${RELEASE_VERSION}.md")"
+          asset_names="$(gh release view "$RELEASE_TAG" --json assets --jq '.assets | map(.name) | sort | join("\n")')"
+          gh release download "$RELEASE_TAG" \
+            --pattern adversarygraph-images.env \
+            --dir "$download_dir" \
+            --clobber
+          cmp adversarygraph-images.env "$download_dir/adversarygraph-images.env"
+          if [[ "$is_draft" != "true" || "$is_prerelease" != "false" || "$actual_name" != "AdversaryGraph v${RELEASE_VERSION}" || "$actual_body" != "$expected_body" || "$asset_names" != "adversarygraph-images.env" ]]; then
+            echo "Release draft changed before publication; refusing further changes." >&2
+            exit 1
+          fi
+          gh release edit "$RELEASE_TAG" --draft=false

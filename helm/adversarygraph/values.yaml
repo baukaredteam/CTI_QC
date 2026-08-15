@@ -1,0 +1,235 @@
+global:
+  imagePullPolicy: Always
+
+image:
+  repository: ghcr.io/anpa1200/adversarygraph-backend
+  tag: "6.5.0"
+  # Set to a reviewed sha256:... value in production. When present, digest
+  # takes precedence over tag without requiring a chart change.
+  digest: ""
+
+frontend:
+  image:
+    repository: ghcr.io/anpa1200/adversarygraph-frontend
+    tag: "6.5.0"
+    digest: ""
+  replicas: 1
+  service:
+    type: ClusterIP
+    port: 80
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+api:
+  replicas: 1
+  service:
+    port: 8000
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+worker:
+  replicas: 1
+  concurrency: 2
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 3Gi
+
+beat:
+  enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+postgresql:
+  enabled: true
+  image:
+    # Development-compatible upstream pgvector image. Production mode rejects
+    # this fallback and requires the release's reviewed adversarygraph-postgres
+    # repository and digest from adversarygraph-images.env.
+    repository: pgvector/pgvector
+    tag: "0.8.2-pg16"
+    digest: sha256:00ba258a66dac104fd5171074a0084462a64a1369d8513f3d0a634e2f24d15bc
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  storageSize: 50Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+redis:
+  enabled: true
+  image: redis:7-alpine
+  imageDigest: sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+malwaregraph:
+  enabled: true
+  image:
+    repository: ghcr.io/anpa1200/adversarygraph-malwaregraph
+    tag: "6.5.0"
+    digest: ""
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  storageSize: 20Gi
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+persistence:
+  attckDataSize: 10Gi
+  logsSize: 20Gi
+  attckData:
+    storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
+  logs:
+    storageClassName: ""
+    accessModes:
+      - ReadWriteOnce
+
+ingress:
+  enabled: false
+  className: ""
+  host: adversarygraph.example.com
+  tlsSecretName: ""
+
+networkPolicy:
+  # Baseline ingress isolation is enabled by default. Egress remains open
+  # because provider/feed destinations and DNS controls are cluster-specific.
+  enabled: true
+  # Each value is a list of additional Kubernetes NetworkPolicy ingress rules.
+  # Use these for monitoring, backup, or ingress-controller paths not covered
+  # by the baseline component relationships.
+  extraIngress:
+    api: []
+    frontend: []
+    malwaregraph: []
+    postgres: []
+    redis: []
+    worker: []
+    beat: []
+
+secrets:
+  # Required for installation. Create this Secret out-of-band; the chart does
+  # not render placeholder production credentials by default.
+  existingSecret: adversarygraph-runtime
+  dbName: adversarygraph
+  dbUser: ag_user
+  dbPassword: ""
+  redisPassword: ""
+  authBootstrapAdminPassword: ""
+  proxySecret: ""
+  rateLimitProxySecret: ""
+  anthropicApiKey: ""
+  openaiApiKey: ""
+  geminiApiKey: ""
+  minimaxApiKey: ""
+  localLlmApiKey: ""
+  nvdApiKey: ""
+  threatfoxAuthKey: ""
+  otxApiKey: ""
+  virustotalApiKey: ""
+  urlscanApiKey: ""
+  shodanApiKey: ""
+  abuseipdbApiKey: ""
+  censysApiKey: ""
+  censysOrgId: ""
+  openctiUrl: ""
+  openctiToken: ""
+  malwaregraphApiKey: ""
+
+config:
+  # Set true in reviewed production values. This enables fail-closed Helm
+  # checks for auth/TLS-cookie/CORS/network-policy/secret/image contracts.
+  productionMode: "false"
+  authEnabled: true
+  authSsoMode: proxy
+  authDefaultRole: viewer
+  authSessionMinutes: "720"
+  authPasswordMinLength: "12"
+  authPasswordRequireUpper: "false"
+  authPasswordRequireLower: "false"
+  authPasswordRequireNumber: "false"
+  authPasswordRequireSpecial: "false"
+  authMfaEnabled: "false"
+  # Set true only for an upgrade where a named permanent admin was verified
+  # before removing bootstrap/proxy credentials from a chart-managed Secret.
+  authExistingAdminConfirmed: "false"
+  secureCookies: "true"
+  corsAllowedOrigins: "https://adversarygraph.example.com"
+  attckDomains: "enterprise-attack,mobile-attack,ics-attack,atlas"
+  autoIocFullSyncOnStartup: "false"
+  autoThreatfoxSyncDays: "7"
+  logLevel: info
+  openaiModel: gpt-4.1
+  geminiModel: gemini-3.5-flash
+  minimaxModel: MiniMax-M2.7
+  minimaxBaseUrl: https://api.minimax.io/v1
+  # Kubernetes has no portable host.docker.internal mapping. Set this to a
+  # reachable in-cluster Service or reviewed private gateway to enable local AI.
+  localLlmBaseUrl: ""
+  localLlmModel: llama3.1:8b
+  threatHuntingAiEnabled: "true"
+  threatHuntingAiCloudEnabled: "false"
+  threatHuntingAiDefaultProvider: local
+  threatHuntingAiTimeoutSeconds: "45"
+  threatHuntingAiSourceCharLimit: "40000"
+  threatHuntingAiMaxCandidates: "3"
+  ragEnabled: "true"
+  # Enable only after localLlmBaseUrl exposes a reviewed private embedding
+  # model with the configured dimensions.
+  ragEmbeddingEnabled: "false"
+  ragEmbeddingProvider: local
+  ragEmbeddingModel: nomic-embed-text
+  ragEmbeddingDimensions: "768"
+  ragEmbeddingBatchSize: "32"
+  ragVectorMaxCosineDistance: "0.55"
+  ragChunkChars: "3500"
+  ragChunkOverlapChars: "350"
+  ragDefaultResultLimit: "12"
+  ragMaxContextChars: "32000"
+  ragReconcileHour: "4"
+  ragReconcileMinute: "15"
+  # Set either retention day value to "0" to disable that automatic purge
+  # path for an operator-controlled legal hold. Backup policy is separate.
+  ragTombstoneRetentionDays: "30"
+  ragAssistanceRetentionDays: "90"
+  ragRetentionBatchSize: "1000"
+  ragRetentionMaxBatches: "20"
+  ragRetentionHour: "4"
+  ragRetentionMinute: "45"
+  malwaregraphMaxUploadBytes: "268435456"

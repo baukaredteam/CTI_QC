@@ -1,0 +1,235 @@
+"""
+Integration smoke-tests for the ATT&CK and APT routes.
+
+These run against a real FastAPI instance (no network, no external DB needed
+for these particular tests since we verify the API shape and error responses).
+"""
+
+import pytest
+from httpx import AsyncClient
+
+import main as main_module
+from main import app
+
+
+# ── Health ─────────────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_health(client: AsyncClient):
+    resp = await client.get("/api/health")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"] == "ok"
+    assert body["version"] == app.version
+    assert body["startup"]["status"] in {"starting", "ready", "degraded"}
+    assert body["startup"]["reference_ingestion"]["status"] in {"pending", "running", "complete", "failed"}
+
+
+@pytest.mark.asyncio
+async def test_readiness_checks_database(client: AsyncClient, monkeypatch):
+    class Session:
+        async def execute(self, _statement):
+            return None
+
+    class Factory:
+        async def __aenter__(self):
+            return Session()
+
+        async def __aexit__(self, *_args):
+            return None
+
+    monkeypatch.setattr(main_module, "async_session_factory", Factory)
+    response = await client.get("/api/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "ready",
+        "version": app.version,
+        "checks": {"database": "ok"},
+    }
+
+
+@pytest.mark.asyncio
+async def test_readiness_failure_is_stable_and_does_not_leak_detail(client: AsyncClient, monkeypatch):
+    class Session:
+        async def execute(self, _statement):
+            raise RuntimeError("postgresql://user:secret@db/internal")
+
+    class Factory:
+        async def __aenter__(self):
+            return Session()
+
+        async def __aexit__(self, *_args):
+            return None
+
+    monkeypatch.setattr(main_module, "async_session_factory", Factory)
+    response = await client.get("/api/ready")
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "status": "not_ready",
+        "version": app.version,
+        "checks": {"database": "error"},
+    }
+    assert "secret" not in response.text
+
+
+@pytest.mark.asyncio
+async def test_observability_summary_and_metrics(client: AsyncClient):
+    await client.get("/api/health")
+
+    summary = await client.get("/api/observability/summary")
+    assert summary.status_code == 200
+    body = summary.json()
+    assert body["requests_total"] >= 1
+    assert "latency" in body
+    assert isinstance(body["recent_traces"], list)
+
+    metrics = await client.get("/api/observability/metrics")
+    assert metrics.status_code == 200
+    assert "adversarygraph_requests_total" in metrics.text
+
+
+# ── /api/attack/versions ───────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_versions_returns_list(client: AsyncClient):
+    resp = await client.get("/api/attack/versions")
+    # 200 with an empty list is fine (no data ingested in test env)
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+# ── /api/attack/tactics ────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_tactics_no_data_returns_404(client: AsyncClient):
+    """When no ATT&CK data has been ingested the endpoint should 404."""
+    resp = await client.get("/api/attack/tactics", params={"domain": "enterprise-attack"})
+    assert resp.status_code == 404
+    assert "domain" in resp.json()["detail"].lower() or "data" in resp.json()["detail"].lower()
+
+
+@pytest.mark.asyncio
+async def test_tactics_invalid_domain(client: AsyncClient):
+    resp = await client.get("/api/attack/tactics", params={"domain": "nonexistent-domain"})
+    assert resp.status_code == 404
+
+
+# ── /api/attack/techniques ────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_techniques_no_data_returns_404(client: AsyncClient):
+    resp = await client.get("/api/attack/techniques", params={"domain": "enterprise-attack"})
+    assert resp.status_code == 404
+
+
+# ── /api/attack/techniques/{id} ───────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_technique_detail_not_found(client: AsyncClient):
+    resp = await client.get(
+        "/api/attack/techniques/T9999",
+        params={"domain": "enterprise-attack"},
+    )
+    assert resp.status_code == 404
+
+
+# ── /api/attack/stix ─────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_stix_object_no_data_returns_404(client: AsyncClient):
+    resp = await client.get(
+        "/api/attack/stix/objects/attack-pattern--missing",
+        params={"domain": "enterprise-attack"},
+    )
+    assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_stix_relationships_no_data_returns_404(client: AsyncClient):
+    resp = await client.get(
+        "/api/attack/stix/relationships",
+        params={"domain": "enterprise-attack", "relationship_type": "uses"},
+    )
+    assert resp.status_code == 404
+
+
+# ── /api/apt/groups ───────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_groups_no_data_returns_404(client: AsyncClient):
+    resp = await client.get("/api/apt/groups", params={"domain": "enterprise-attack"})
+    assert resp.status_code == 404
+
+
+# ── /api/apt/compare ──────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_compare_empty_list_returns_400(client: AsyncClient):
+    resp = await client.post(
+        "/api/apt/compare",
+        json={"technique_ids": []},
+        params={"domain": "enterprise-attack"},
+    )
+    assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_compare_no_data_returns_404(client: AsyncClient):
+    resp = await client.post(
+        "/api/apt/compare",
+        json={"technique_ids": ["T1566", "T1059"]},
+        params={"domain": "enterprise-attack"},
+    )
+    assert resp.status_code == 404
+
+
+# ── /api/sync/status ──────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_sync_status_shape(client: AsyncClient, monkeypatch):
+    from app.services.attck.version_checker import DomainStatus
+
+    async def fake_statuses():
+        return [
+            DomainStatus(
+                domain="enterprise-attack",
+                current_version="19.1",
+                latest_version="19.1",
+                needs_update=False,
+                last_ingested="2026-07-18T00:00:00+00:00",
+            )
+        ]
+
+    monkeypatch.setattr("app.api.routes.sync._get_attck_statuses", fake_statuses)
+    resp = await client.get("/api/sync/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "sources" in body
+    assert "domains" in body
+    assert "any_updates_needed" in body
+    for domain_info in body["domains"]:
+        assert domain_info["source"] == "mitre-attack"
+        assert "domain" in domain_info
+        assert "current_version" in domain_info
+        assert "content" in domain_info
+
+
+@pytest.mark.asyncio
+async def test_dynamic_db_sync_runs_from_async_route(client: AsyncClient, monkeypatch):
+    async def fake_dynamic_reference_db(days: int = 7, force_attack: bool = False):
+        return {
+            "attack": [{"domain": "enterprise-attack", "action": "skipped"}],
+            "sector": {"status": "ok"},
+            "ioc": {"days": days, "totals": {"new": 0}, "sources": []},
+        }
+
+    monkeypatch.setattr("app.tasks.sync.run_dynamic_reference_db_async", fake_dynamic_reference_db)
+
+    resp = await client.post("/api/sync/dynamic-db?days=1&force_attack=false")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["attack"][0]["domain"] == "enterprise-attack"
+    assert body["ioc"]["days"] == 1

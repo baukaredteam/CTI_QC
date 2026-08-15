@@ -1,0 +1,1144 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { PointerEvent, ReactNode } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import {
+  malwareGraphApi,
+  type MalwareGraphDebugAssistant,
+  type MalwareGraphDecompilation,
+  type MalwareGraphDebuggerWorkspace,
+  type MalwareGraphFirstAnalysis,
+} from '@/api/client';
+import { Header } from '@/components/Layout/Header';
+import { RUNTIME_DEBUG_DISCLAIMER, readHiddenCases, visibleJobs } from '@/pages/malwareShared';
+import { CodeEditor } from '@/components/ui/code-editor';
+import { VirtualList } from '@/components/ui/virtual-list';
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from '@/components/ui/resizable';
+import { safeInternalHref } from '@/utils/url';
+
+const input = 'w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-xs text-gray-200 outline-none focus:border-mitre-accent';
+
+type DebugTrace = MalwareGraphDebuggerWorkspace['function_traces'][number];
+
+export function Debugger() {
+  const navigate = useNavigate();
+  const [params, setParams] = useSearchParams();
+  const [jobId, setJobId] = useState(params.get('job_id') ?? '');
+  const [sampleRef, setSampleRef] = useState(params.get('sample_ref') ?? '');
+  const [aiProvider, setAiProvider] = useState(params.get('ai_provider') ?? 'local');
+  const [dynamicDebug, setDynamicDebug] = useState(params.get('dynamic') === 'true');
+  const [workspace, setWorkspace] = useState<MalwareGraphDebuggerWorkspace | null>(null);
+  const [decompilation, setDecompilation] = useState<MalwareGraphDecompilation | null>(null);
+  const [decompilationError, setDecompilationError] = useState('');
+  const [aiAssistant, setAiAssistant] = useState<MalwareGraphDebugAssistant | null>(null);
+  const [selectedTraceId, setSelectedTraceId] = useState<string>('');
+  const [autoRunFunctions, setAutoRunFunctions] = useState(false);
+  const autoWorkspaceKey = useRef('');
+  const autoDecompilationKey = useRef('');
+
+  const jobs = useQuery({ queryKey: ['malwaregraph-jobs'], queryFn: malwareGraphApi.jobs, retry: false });
+  const providers = useQuery({ queryKey: ['malwaregraph-providers'], queryFn: malwareGraphApi.providers, retry: false });
+  const analysis = useQuery({
+    queryKey: ['malwaregraph-analysis', jobId],
+    queryFn: () => malwareGraphApi.analysis(jobId),
+    enabled: Boolean(jobId),
+  });
+  const targets = useMemo(() => {
+    const firstPass = (analysis.data?.artifacts ?? []).filter(isFirstAnalysis) as unknown as MalwareGraphFirstAnalysis[];
+    if (firstPass.length) {
+      return firstPass.map(item => ({
+        id: item.target_entity_id,
+        label: item.target_name,
+        detail: `${item.file_type} · entropy ${item.entropy.toFixed(3)}`,
+      }));
+    }
+    return (analysis.data?.entities ?? [])
+      .filter(entity => entity.type === 'file' && entity.entity_id !== 'archive--file--0001')
+      .map(entity => ({
+        id: entity.entity_id,
+        label: entity.normalized_value || entity.value,
+        detail: String(entity.metadata.file_type ?? entity.source_stage),
+      }));
+  }, [analysis.data?.artifacts, analysis.data?.entities]);
+
+  useEffect(() => {
+    if (jobId && readHiddenCases().has(jobId)) { setJobId(''); setSampleRef(''); }
+  }, [jobId]);
+
+  useEffect(() => {
+    const visible = visibleJobs(jobs.data ?? []);
+    if (!jobId && visible.length) setJobId(visible[0].job_id);
+  }, [jobId, jobs.data]);
+
+  useEffect(() => {
+    if (!sampleRef && targets.length) setSampleRef(targets[0].id);
+  }, [sampleRef, targets]);
+
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (jobId) next.set('job_id', jobId);
+    if (sampleRef) next.set('sample_ref', sampleRef);
+    next.set('ai_provider', aiProvider);
+    if (dynamicDebug) next.set('dynamic', 'true');
+    setParams(next, { replace: true });
+  }, [aiProvider, dynamicDebug, jobId, sampleRef, setParams]);
+
+  useEffect(() => {
+    if (workspace?.current_trace_id) setSelectedTraceId(workspace.current_trace_id);
+  }, [workspace?.current_trace_id]);
+
+  useEffect(() => {
+    if (!autoRunFunctions || !workspace || workspace.completed || stepWorkspace.isPending) return;
+    stepWorkspace.mutate();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoRunFunctions, workspace?.step_count, workspace?.completed]);
+
+  const createDebugWorkspace = () => malwareGraphApi.debugWorkspace(jobId, sampleRef, aiProvider, dynamicDebug, dynamicDebug);
+
+  const createWorkspace = useMutation({
+    mutationFn: createDebugWorkspace,
+    onSuccess: result => {
+      setWorkspace(result);
+      setAiAssistant(result.ai_assistant ?? null);
+      const normalized = normalizeDecompilation(result.decompilation);
+      if (normalized) {
+        setDecompilation(normalized);
+        setDecompilationError('');
+      }
+    },
+  });
+  const stepWorkspace = useMutation({
+    mutationFn: async () => {
+      if (!workspace) return malwareGraphApi.stepDebugWorkspace((await createDebugWorkspace()).session_id);
+      try {
+        return await malwareGraphApi.stepDebugWorkspace(workspace.session_id);
+      } catch (error) {
+        if (!isMissingDebugWorkspace(error)) throw error;
+        const fresh = await createDebugWorkspace();
+        return malwareGraphApi.stepDebugWorkspace(fresh.session_id);
+      }
+    },
+    onSuccess: result => {
+      setWorkspace(result);
+      if (result.completed) setAutoRunFunctions(false);
+    },
+  });
+  const loadDecompilation = useMutation({
+    mutationFn: () => malwareGraphApi.decompilation(jobId, sampleRef),
+    onMutate: () => {
+      setDecompilation(null);
+      setDecompilationError('');
+    },
+    onSuccess: result => {
+      const normalized = normalizeDecompilation(result);
+      if (normalized) {
+        setDecompilation(normalized);
+        setDecompilationError('');
+        return;
+      }
+      setDecompilationError('The decompilation endpoint returned an unsupported response shape.');
+    },
+    onError: error => setDecompilationError(String(error)),
+  });
+  const runAiAssistant = useMutation({
+    mutationFn: async () => {
+      if (!workspace) {
+        const fresh = await createDebugWorkspace();
+        return {
+          workspace: fresh,
+          assistant: await malwareGraphApi.debugWorkspaceAiAssistant(fresh.session_id, aiProvider),
+        };
+      }
+      try {
+        return {
+          workspace,
+          assistant: await malwareGraphApi.debugWorkspaceAiAssistant(workspace.session_id, aiProvider),
+        };
+      } catch (error) {
+        if (!isMissingDebugWorkspace(error)) throw error;
+        const fresh = await createDebugWorkspace();
+        return {
+          workspace: fresh,
+          assistant: await malwareGraphApi.debugWorkspaceAiAssistant(fresh.session_id, aiProvider),
+        };
+      }
+    },
+    onSuccess: ({ workspace: refreshedWorkspace, assistant: result }) => {
+      setAiAssistant(result);
+      setWorkspace({ ...refreshedWorkspace, ai_assistant: result });
+    },
+  });
+
+  useEffect(() => {
+    if (!jobId || !sampleRef || workspace || createWorkspace.isPending) return;
+    const key = `${jobId}:${sampleRef}:${aiProvider}:${dynamicDebug ? 'dynamic' : 'static'}`;
+    if (autoWorkspaceKey.current === key) return;
+    autoWorkspaceKey.current = key;
+    createWorkspace.mutate();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aiProvider, dynamicDebug, jobId, sampleRef, workspace?.session_id, createWorkspace.isPending]);
+
+  useEffect(() => {
+    if (!jobId || !sampleRef || decompilation || loadDecompilation.isPending) return;
+    const key = `${jobId}:${sampleRef}`;
+    if (autoDecompilationKey.current === key) return;
+    autoDecompilationKey.current = key;
+    loadDecompilation.mutate();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId, sampleRef, decompilation?.artifact_id, loadDecompilation.isPending]);
+
+  const currentTrace = workspace?.function_traces.find(trace => trace.trace_id === workspace.current_trace_id)
+    ?? workspace?.function_traces[workspace.current_trace_index]
+    ?? workspace?.function_traces[0]
+    ?? null;
+  const selectedTrace = workspace?.function_traces.find(trace => trace.trace_id === selectedTraceId)
+    ?? currentTrace;
+
+  return <div className="flex h-full flex-col">
+    <Header title="Decompilation & Debug IDE" />
+    <div className="flex-1 overflow-y-auto p-6">
+      <ResizablePanelGroup orientation="horizontal" className="mx-auto max-w-[1800px] gap-4">
+        <ResizablePanel
+          id="debugger-source-panel"
+          defaultSize="360px"
+          minSize="320px"
+          maxSize="520px"
+          groupResizeBehavior="preserve-pixel-size"
+        >
+          <div className="space-y-4">
+          <Panel title="Source">
+            <div className="space-y-3 p-3">
+              <label className="block text-[10px] uppercase text-gray-600">Analysis job</label>
+              <select value={jobId} onChange={event => { setJobId(event.target.value); setSampleRef(''); setWorkspace(null); setDecompilation(null); setDecompilationError(''); setAiAssistant(null); }} className={input}>
+                {visibleJobs(jobs.data ?? []).map(job => <option key={job.job_id} value={job.job_id}>{job.archive_name ?? job.job_id}</option>)}
+              </select>
+              <label className="block text-[10px] uppercase text-gray-600">Debug target</label>
+              <select value={sampleRef} onChange={event => { setSampleRef(event.target.value); setWorkspace(null); setDecompilation(null); setDecompilationError(''); setAiAssistant(null); }} className={input}>
+                {targets.map(target => <option key={target.id} value={target.id}>{target.label}</option>)}
+              </select>
+              <label className="block text-[10px] uppercase text-gray-600">AI provider</label>
+              <select value={aiProvider} onChange={event => setAiProvider(event.target.value)} className={input}>
+                {(providers.data ?? []).map(provider => <option key={provider.provider} value={provider.provider}>{provider.provider} · {provider.configured ? provider.model : provider.env_var}</option>)}
+              </select>
+              <label className="flex items-start gap-2 rounded border border-amber-500/30 bg-amber-500/10 p-2 text-[11px] leading-relaxed text-amber-100">
+                <input className="mt-0.5" type="checkbox" checked={dynamicDebug} onChange={event => setDynamicDebug(event.target.checked)} />
+                <span>
+                  <b className="block text-amber-50">Dynamic debug</b>
+                  {RUNTIME_DEBUG_DISCLAIMER}
+                </span>
+              </label>
+              <button className="primary w-full" onClick={() => { stepWorkspace.reset(); runAiAssistant.reset(); createWorkspace.mutate(); }} disabled={!jobId || !sampleRef || createWorkspace.isPending}>{createWorkspace.isPending ? 'Creating...' : 'Create debug workspace'}</button>
+              <button className="secondary-action w-full" onClick={() => loadDecompilation.mutate()} disabled={!jobId || !sampleRef || loadDecompilation.isPending}>{loadDecompilation.isPending ? 'Decompiling...' : decompilation ? 'Reload decompilation' : 'Load decompilation'}</button>
+              <button className="secondary-action w-full" onClick={() => stepWorkspace.mutate()} disabled={!workspace || workspace.completed || stepWorkspace.isPending}>{stepWorkspace.isPending ? 'Stepping...' : workspace?.completed ? 'Session complete' : 'Step function'}</button>
+              <button className="secondary-action w-full" onClick={() => setAutoRunFunctions(true)} disabled={!workspace || workspace.completed || stepWorkspace.isPending || autoRunFunctions}>{autoRunFunctions ? 'Running functions...' : 'Run all functions'}</button>
+              {autoRunFunctions && <button className="secondary-action w-full" onClick={() => setAutoRunFunctions(false)}>Stop function run</button>}
+              <button className="primary w-full" onClick={() => runAiAssistant.mutate()} disabled={!workspace || runAiAssistant.isPending}>{runAiAssistant.isPending ? 'AI assistant running...' : aiAssistant ? 'Refresh AI debug summary' : 'Full AI debug summary'}</button>
+              <button className="secondary-action w-full" onClick={() => navigate(`/dynamic-analysis?job_id=${encodeURIComponent(jobId)}&sample_ref=${encodeURIComponent(sampleRef)}${dynamicDebug ? '&dynamic=true' : ''}`)}>Dynamic analysis</button>
+              <button className="secondary-action w-full" onClick={() => navigate(`/malware-analysis?job_id=${encodeURIComponent(jobId)}&sample_ref=${encodeURIComponent(sampleRef)}`)}>Back to Malware Analysis</button>
+              {(createWorkspace.error || stepWorkspace.error || loadDecompilation.error || decompilationError || runAiAssistant.error) && <p className="text-xs text-red-300">{String(createWorkspace.error ?? stepWorkspace.error ?? loadDecompilation.error ?? decompilationError ?? runAiAssistant.error)}</p>}
+            </div>
+          </Panel>
+          <Panel title="Controls">
+            {workspace ? <div className="divide-y divide-gray-800">
+              {workspace.controls.map(control => <div key={String(control.control_id)} className="flex items-center justify-between px-3 py-2 text-xs">
+                <span className="text-gray-300">{field(control.label)}</span>
+                <span style={{ color: statusColor(field(control.status)) }}>{field(control.status)}</span>
+              </div>)}
+            </div> : <Empty text="Create a debug workspace." />}
+          </Panel>
+          <Panel title="Breakpoints">
+            {workspace ? <div className="max-h-80 overflow-y-auto divide-y divide-gray-800">
+              {workspace.breakpoints.map(item => <div key={field(item.breakpoint_id)} className="p-3 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <b className="font-mono text-gray-200">{field(item.address)}</b>
+                  <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[10px] text-gray-500">{field(item.source)}</span>
+                </div>
+                <div className="mt-1 truncate text-gray-500">{field(item.name)}</div>
+              </div>)}
+            </div> : <Empty text="No breakpoints." />}
+          </Panel>
+          </div>
+        </ResizablePanel>
+
+        <ResizableHandle className="hidden xl:block" />
+        <ResizablePanel id="debugger-workspace-panel" defaultSize="75%" minSize="50%">
+          <div className="space-y-4">
+          {workspace ? <>
+            {workspace.warning && <div className="rounded border border-amber-500/40 bg-amber-950/30 p-3 text-sm font-semibold text-amber-100">{workspace.warning}</div>}
+            <div className="grid gap-3 md:grid-cols-5">
+              <Metric label="Target" value={workspace.target_name} />
+              <Metric label="Mode" value={workspace.mode} />
+              <Metric label="Functions" value={workspace.function_traces.length} />
+              <Metric label="API hooks" value={workspace.api_hooks.length} />
+              <Metric label="Step" value={`${workspace.step_count}/${Math.max(0, workspace.function_traces.length - 1)}`} />
+            </div>
+            <Panel title="Decompilation">
+              {loadDecompilation.isPending
+                ? <Empty text="Loading decompilation." />
+                : decompilation
+                  ? <DecompilationPane result={decompilation} />
+                  : <Empty text="Load decompilation to view entrypoint metadata, pseudocode, recovered APIs, sections, warnings, and interesting strings." />}
+            </Panel>
+            <Panel title="Entrypoint Finding">
+              <EntrypointFinding workspace={workspace} decompilation={decompilation} onTrace={setSelectedTraceId} />
+            </Panel>
+            <Panel title="OllyDbg CPU View">
+              {selectedTrace
+                ? <OllyDbgCpuView workspace={workspace} trace={selectedTrace} assistant={aiAssistant} onTrace={setSelectedTraceId} />
+                : <Empty text="Select a function to inspect CPU-style disassembly, registers, stack, API hooks, and AI notes." />}
+            </Panel>
+            <Panel title="AIDebug Function Graph">
+              <DebuggerGraph workspace={workspace} selectedTrace={selectedTrace} onTrace={setSelectedTraceId} />
+            </Panel>
+              <Panel title={`Full AI Debug Summary${aiAssistant?.provider ? ` · ${aiAssistant.provider}` : ''}`}>
+              <AiAssistantPanel result={aiAssistant} pending={runAiAssistant.isPending} />
+            </Panel>
+            <div className="grid gap-4 xl:grid-cols-[420px_1fr]">
+              <Panel title="Function Traces">
+                <TraceList workspace={workspace} selectedTraceId={selectedTrace?.trace_id ?? ''} assistant={aiAssistant} onTrace={setSelectedTraceId} />
+              </Panel>
+              <Panel title="IDA Function View">
+                {selectedTrace ? <CurrentFunction trace={selectedTrace} assistant={aiAssistant} /> : <Empty text="No selected function." />}
+              </Panel>
+            </div>
+            <div className="grid gap-4 xl:grid-cols-2">
+              <Panel title="Registers">
+                <Registers workspace={workspace} />
+              </Panel>
+              <Panel title="Memory Regions">
+                <MemoryRegions workspace={workspace} />
+              </Panel>
+              <Panel title="API Hooks">
+                <ApiHooks workspace={workspace} />
+              </Panel>
+              <Panel title="IOC / TTP Leads">
+                <Leads workspace={workspace} />
+              </Panel>
+            </div>
+            <div className="grid gap-4 xl:grid-cols-2">
+              <Panel title="Debug Events">
+                <Events workspace={workspace} />
+              </Panel>
+              <Panel title="AIDebug JSON Export">
+                <CodeEditor value={JSON.stringify(workspace.export, null, 2)} language="json" height="360px" />
+              </Panel>
+            </div>
+          </> : loadDecompilation.isPending ? <Panel title="Decompilation">
+            <Empty text="Loading decompilation." />
+          </Panel> : decompilation ? <Panel title="Decompilation">
+            <DecompilationPane result={decompilation} />
+          </Panel> : <Empty text="Select a MalwareGraph job and target to create a debugger workspace or load decompilation." />}
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    </div>
+  </div>;
+}
+
+function DebuggerGraph({ workspace, selectedTrace, onTrace }: { workspace: MalwareGraphDebuggerWorkspace; selectedTrace: DebugTrace | null; onTrace: (traceId: string) => void }) {
+  const scrollerRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef({ active: false, x: 0, y: 0, left: 0, top: 0, moved: false });
+  const traces = workspace.function_traces;
+  const lanes = ['HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'];
+  const left = 92;
+  const right = 220;
+  const top = 86;
+  const laneHeight = 86;
+  const spacing = 170;
+  const nodeWidth = 140;
+  const nodeHeight = 46;
+  const width = Math.max(1100, left + Math.max(1, traces.length) * spacing + nodeWidth + right);
+  const height = top + (lanes.length - 1) * laneHeight + nodeHeight + 70;
+  const edgeBySource = new Map(workspace.graph.edges.map(edge => [edge.source, edge]));
+
+  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    const element = scrollerRef.current;
+    if (!element) return;
+    dragRef.current = {
+      active: true,
+      x: event.clientX,
+      y: event.clientY,
+      left: element.scrollLeft,
+      top: element.scrollTop,
+      moved: false,
+    };
+    element.setPointerCapture(event.pointerId);
+  };
+  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    const element = scrollerRef.current;
+    const drag = dragRef.current;
+    if (!element || !drag.active) return;
+    event.preventDefault();
+    const dx = event.clientX - drag.x;
+    const dy = event.clientY - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+    element.scrollLeft = drag.left - dx;
+    element.scrollTop = drag.top - dy;
+  };
+  const stopDrag = (event: PointerEvent<HTMLDivElement>) => {
+    dragRef.current.active = false;
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  };
+
+  return <div
+    ref={scrollerRef}
+    className="h-[560px] max-w-full cursor-grab select-none overflow-auto overscroll-contain p-3 active:cursor-grabbing"
+    style={{ touchAction: 'none' }}
+    onPointerDown={onPointerDown}
+    onPointerMove={onPointerMove}
+    onPointerUp={stopDrag}
+    onPointerCancel={stopDrag}
+  >
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} className="block max-w-none rounded border border-gray-800 bg-gray-950">
+      <defs>
+        <marker id={`debugger-arrow-${workspace.session_id}`} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="strokeWidth">
+          <path d="M 0 0 L 8 4 L 0 8 z" fill="#64748b" />
+        </marker>
+      </defs>
+      {lanes.map((risk, index) => <g key={risk}>
+        <line x1={left - 28} y1={top + index * laneHeight + nodeHeight / 2} x2={width - right / 2} y2={top + index * laneHeight + nodeHeight / 2} stroke="#111827" />
+        <text x={left - 28} y={top + index * laneHeight - 14} fill={riskColor(risk)} fontSize="11" fontWeight="700">{risk}</text>
+      </g>)}
+      {traces.map((trace, index) => {
+        const x = left + index * spacing;
+        const lane = riskLane(trace.risk_level);
+        const y = top + lane * laneHeight;
+        const active = selectedTrace?.trace_id === trace.trace_id;
+        const edge = edgeBySource.get(trace.node_id);
+        const nextIndex = edge ? traces.findIndex(item => item.node_id === edge.target) : index + 1;
+        const color = trace.is_entrypoint ? '#22c55e' : active ? '#38bdf8' : riskColor(trace.risk_level);
+        const nextX = left + nextIndex * spacing;
+        const nextY = top + riskLane(traces[nextIndex]?.risk_level ?? 'UNKNOWN') * laneHeight + nodeHeight / 2;
+        return <g key={trace.trace_id}>
+          {nextIndex > index && nextIndex < traces.length && <path
+            d={`M ${x + nodeWidth} ${y + nodeHeight / 2} C ${x + nodeWidth + 42} ${y - 38}, ${nextX - 52} ${nextY - 38}, ${nextX} ${nextY}`}
+            fill="none"
+            stroke="#475569"
+            strokeWidth="1"
+            opacity="0.7"
+            markerEnd={`url(#debugger-arrow-${workspace.session_id})`}
+          />}
+          <g data-debug-node="true" role="button" tabIndex={0} className="cursor-pointer" onClick={() => {
+            if (dragRef.current.moved) return;
+            onTrace(trace.trace_id);
+          }} onKeyDown={event => {
+            if (event.key === 'Enter' || event.key === ' ') onTrace(trace.trace_id);
+          }}>
+            <rect x={x} y={y} width={nodeWidth} height={nodeHeight} rx="4" fill="#111827" stroke={color} strokeWidth={active ? 2.4 : 1.3} />
+            <rect x={x} y={y} width="5" height={nodeHeight} rx="2" fill={color} />
+            <text x={x + 12} y={y + 17} fill="#e5e7eb" fontSize="11" fontWeight="700">{shortLabel(trace.is_entrypoint ? 'entrypoint' : trace.name, 18)}</text>
+            <text x={x + 12} y={y + 33} fill="#64748b" fontSize="10">{trace.address}</text>
+            <title>{trace.name} · {trace.risk_level} · {trace.summary}</title>
+          </g>
+        </g>;
+      })}
+    </svg>
+  </div>;
+}
+
+function TraceList({ workspace, selectedTraceId, assistant, onTrace }: { workspace: MalwareGraphDebuggerWorkspace; selectedTraceId: string; assistant: MalwareGraphDebugAssistant | null; onTrace: (traceId: string) => void }) {
+  return <div className="max-h-[520px] overflow-y-auto divide-y divide-gray-800">
+    {workspace.function_traces.map(trace => {
+      const ai = functionAiForTrace(assistant, trace);
+      const tag = functionTag(trace, ai);
+      return <button key={trace.trace_id} onClick={() => onTrace(trace.trace_id)} className={`block w-full p-3 text-left text-xs ${trace.trace_id === selectedTraceId ? 'bg-mitre-accent/10' : 'hover:bg-gray-900'}`}>
+      <div className="flex items-start justify-between gap-2">
+        <b className="min-w-0 truncate font-mono text-gray-200">{trace.name}</b>
+        <span className={`shrink-0 rounded px-1.5 py-0.5 text-[10px] ${tagClass(tag)}`}>{tag}</span>
+      </div>
+      <div className="mt-1 flex flex-wrap gap-2 text-[10px] text-gray-600">
+        <span>{trace.address}</span>
+        <span>{trace.instruction_count} insn</span>
+        <span>{trace.status}</span>
+        <span style={{ color: riskColor(trace.risk_level) }}>{trace.risk_level}</span>
+      </div>
+      <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-gray-500"><TtpText value={field(ai?.purpose ?? ai?.summary ?? ai?.description) || trace.summary} /></p>
+    </button>;
+    })}
+  </div>;
+}
+
+function CurrentFunction({ trace, assistant }: { trace: DebugTrace; assistant: MalwareGraphDebugAssistant | null }) {
+  const ai = functionAiForTrace(assistant, trace);
+  const tag = functionTag(trace, ai);
+  return <div className="divide-y divide-gray-800 text-xs">
+    <div className="grid gap-2 p-3 md:grid-cols-5">
+      <Info label="Address" value={trace.address} />
+      <Info label="AI tag" value={tag} />
+      <Info label="Risk" value={trace.risk_level} />
+      <Info label="ATT&CK" value={trace.mitre_technique || 'none'} />
+      <Info label="Source" value={`${trace.source}${trace.is_entrypoint ? ' · entrypoint' : ''}`} />
+    </div>
+    <div className="grid gap-3 p-3 xl:grid-cols-[minmax(0,1fr)_320px]">
+      <div>
+        <div className="mb-2 flex flex-wrap items-center gap-2">
+          <span className={`rounded px-2 py-1 text-[10px] font-semibold uppercase ${tagClass(tag)}`}>{tag}</span>
+          <span className="rounded bg-gray-800 px-2 py-1 font-mono text-[10px] text-gray-400">{trace.address}</span>
+          {trace.is_entrypoint && <span className="rounded bg-green-950/40 px-2 py-1 text-[10px] text-green-300">entrypoint</span>}
+        </div>
+        <b className="text-sm text-gray-100">{trace.name}</b>
+        <p className="mt-2 whitespace-pre-wrap leading-relaxed text-gray-300"><TtpText value={field(ai?.purpose ?? ai?.summary ?? ai?.description) || trace.summary || 'No function purpose returned yet.'} /></p>
+      </div>
+      <div className="rounded border border-gray-800 bg-gray-950 p-3">
+        <b className="text-gray-200">AI Function Summary</b>
+        <p className="mt-2 whitespace-pre-wrap text-[11px] leading-relaxed text-gray-400"><TtpText value={field(ai?.evidence ?? ai?.reason ?? ai?.behavior ?? ai?.next_debug_action) || 'Run Full AI debug summary to explain this function and classify its behavior.'} /></p>
+      </div>
+    </div>
+    <div className="p-3">
+      <b className="text-gray-200">Behavior Tags</b>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {trace.behaviors.map(item => <span key={item} className="rounded border border-gray-700 px-2 py-1 text-[10px] text-gray-300"><TtpText value={item} /></span>)}
+        {Boolean(ai?.ttps) && <span className="rounded border border-mitre-accent/40 px-2 py-1 text-[10px] text-mitre-accent"><TtpText value={field(ai?.ttps)} /></span>}
+        {!trace.behaviors.length && !ai?.ttps && <span className="text-gray-600">none</span>}
+      </div>
+    </div>
+    {(trace.api_hooks ?? []).length > 0 && <div className="p-3">
+      <b className="text-gray-200">Function API hooks</b>
+      <div className="mt-2 flex max-h-24 flex-wrap gap-1.5 overflow-y-auto">
+        {(trace.api_hooks ?? []).map(value => <span key={value} className="rounded border border-gray-700 px-2 py-1 font-mono text-[10px] text-gray-300">{value}</span>)}
+      </div>
+    </div>}
+    {trace.strings_referenced.length > 0 && <div className="p-3">
+      <b className="text-gray-200">Referenced strings</b>
+      <div className="mt-2 max-h-28 overflow-y-auto rounded border border-gray-800 bg-gray-950">
+        {trace.strings_referenced.map((value, index) => <div key={`${value}-${index}`} className="break-all border-b border-gray-900 px-2 py-1 font-mono text-[10px] text-gray-500">{value}</div>)}
+      </div>
+    </div>}
+    <div className="p-3">
+      <b className="text-gray-200">Disassembly</b>
+      <div className="mt-2 overflow-hidden rounded border border-gray-800 bg-gray-950">
+        <CodeEditor value={trace.disassembly.map(row => field(row.text)).join('\n') || 'No disassembly recovered.'} language="asm" height="360px" />
+      </div>
+    </div>
+  </div>;
+}
+
+function OllyDbgCpuView({
+  workspace,
+  trace,
+  assistant,
+  onTrace,
+}: {
+  workspace: MalwareGraphDebuggerWorkspace;
+  trace: DebugTrace;
+  assistant: MalwareGraphDebugAssistant | null;
+  onTrace: (traceId: string) => void;
+}) {
+  const ai = functionAiForTrace(assistant, trace);
+  const tag = functionTag(trace, ai);
+  const snapshot = asRecord(trace.snapshot);
+  const entryRegisters = asRecord(snapshot.entry_registers);
+  const exitRegisters = asRecord(snapshot.exit_registers);
+  const registerRows = registerRowsForTrace(workspace, entryRegisters, exitRegisters);
+  const stackRows = stackRowsFromHex(field(snapshot.entry_stack_hex ?? snapshot.stack_hex ?? snapshot.stack_preview));
+  const memoryDiffs = Array.isArray(snapshot.memory_diffs) ? snapshot.memory_diffs : [];
+  const apiHooks = trace.api_hooks?.length ? trace.api_hooks : workspace.api_hooks.map(hook => field(hook.name)).filter(Boolean);
+  const nextTrace = nextTraceAfter(workspace, trace);
+
+  return <div className="grid gap-3 p-3 text-xs xl:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="overflow-hidden rounded border border-gray-800 bg-[#05070c]">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-800 bg-gray-950 px-3 py-2">
+        <div className="min-w-0">
+          <div className="truncate font-mono text-sm font-semibold text-gray-100">{trace.name}</div>
+          <div className="mt-0.5 flex flex-wrap gap-2 text-[10px] uppercase text-gray-600">
+            <span>{trace.address}</span>
+            <span>{trace.executed ? 'executed' : 'symbolic/static'}</span>
+            <span>{trace.instruction_count} instructions</span>
+            <span>{trace.source}</span>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <span className={`rounded px-2 py-1 text-[10px] font-semibold uppercase ${tagClass(tag)}`}>{tag}</span>
+          <span className="rounded border border-gray-700 px-2 py-1 text-[10px] font-semibold" style={{ color: riskColor(trace.risk_level) }}>{trace.risk_level}</span>
+        </div>
+      </div>
+      <div className="max-h-[560px] overflow-auto">
+        <table className="w-full min-w-[860px] border-collapse text-left font-mono text-[11px]">
+          <thead className="sticky top-0 z-10 bg-gray-950 text-[10px] uppercase text-gray-600">
+            <tr>
+              <th className="w-12 px-2 py-2">BP</th>
+              <th className="w-28 px-2 py-2">Address</th>
+              <th className="w-44 px-2 py-2">Bytes</th>
+              <th className="px-2 py-2">Instruction</th>
+              <th className="w-72 px-2 py-2">Comment</th>
+            </tr>
+          </thead>
+          <tbody>
+            {trace.disassembly.length ? trace.disassembly.map((row, index) => {
+              const item = asRecord(row);
+              const address = field(item.address) || (index === 0 ? trace.address : '');
+              const breakpoint = hasBreakpoint(workspace, address);
+              const instruction = instructionText(item);
+              const active = index === 0 || address.toLowerCase() === trace.address.toLowerCase();
+              return <tr key={`${address}-${index}`} className={`border-b border-gray-900 ${active ? 'bg-mitre-accent/10' : 'hover:bg-gray-900/60'}`}>
+                <td className="px-2 py-1.5 text-center">{breakpoint ? <span className="inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-600 text-[9px] font-bold text-white">B</span> : <span className="text-gray-800">.</span>}</td>
+                <td className={active ? 'px-2 py-1.5 text-mitre-accent' : 'px-2 py-1.5 text-gray-400'}>{address || '-'}</td>
+                <td className="break-all px-2 py-1.5 text-gray-600">{field(item.bytes ?? item.opcodes ?? item.hex) || '-'}</td>
+                <td className={`break-all px-2 py-1.5 ${instructionTone(instruction)}`}>{instruction}</td>
+                <td className="break-words px-2 py-1.5 text-gray-500"><TtpText value={instructionComment(trace, ai, item, index)} /></td>
+              </tr>;
+            }) : <tr><td colSpan={5} className="px-3 py-6 text-center text-gray-600">No disassembly recovered for this function.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div className="space-y-3">
+      <div className="rounded border border-gray-800 bg-gray-950">
+        <div className="border-b border-gray-800 px-3 py-2 font-semibold text-gray-200">Registers</div>
+        <div className="max-h-64 overflow-auto">
+          <table className="w-full text-left font-mono text-[11px]">
+            <thead className="bg-gray-950 text-[10px] uppercase text-gray-600"><tr><th className="px-3 py-2">Reg</th><th className="px-3 py-2">Entry</th><th className="px-3 py-2">Exit</th></tr></thead>
+            <tbody className="divide-y divide-gray-900">
+              {registerRows.map(row => <tr key={row.name}>
+                <td className="px-3 py-1.5 text-gray-200">{row.name}</td>
+                <td className="break-all px-3 py-1.5 text-gray-500">{row.entry || '-'}</td>
+                <td className={row.changed ? 'break-all px-3 py-1.5 text-mitre-accent' : 'break-all px-3 py-1.5 text-gray-500'}>{row.exit || '-'}</td>
+              </tr>)}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="rounded border border-gray-800 bg-gray-950">
+        <div className="border-b border-gray-800 px-3 py-2 font-semibold text-gray-200">Stack</div>
+        <div className="max-h-52 overflow-auto font-mono text-[11px]">
+          {stackRows.length ? stackRows.map(row => <div key={row.offset} className="grid grid-cols-[70px_1fr] border-b border-gray-900 px-3 py-1.5">
+            <span className="text-gray-600">{row.offset}</span>
+            <span className="break-all text-gray-400">{row.bytes}</span>
+          </div>) : <div className="p-3 text-gray-600">No stack snapshot returned.</div>}
+        </div>
+      </div>
+
+      <div className="rounded border border-gray-800 bg-gray-950 p-3">
+        <div className="flex items-center justify-between gap-2">
+          <b className="text-gray-200">Step Context</b>
+          {nextTrace && <button className="secondary-action min-w-24" onClick={() => onTrace(nextTrace.trace_id)}>Next function</button>}
+        </div>
+        <div className="mt-2 grid gap-2">
+          <Info label="Status" value={trace.status} />
+          <Info label="Branch / calls" value={trace.calls_to.length ? trace.calls_to.join(', ') : field(snapshot.branch_decision ?? snapshot.branch ?? 'not observed')} />
+          <Info label="Return" value={field(snapshot.return_value ?? snapshot.exit_code ?? 'unknown')} />
+        </div>
+      </div>
+    </div>
+
+    <div className="grid gap-3 xl:col-span-2 lg:grid-cols-3">
+      <div className="rounded border border-gray-800 bg-gray-950 p-3">
+        <b className="text-gray-200">AI Function Explanation</b>
+        <p className="mt-2 whitespace-pre-wrap text-[11px] leading-relaxed text-gray-400"><TtpText value={field(ai?.purpose ?? ai?.summary ?? ai?.description) || trace.summary || 'Run Full AI debug summary for per-function explanation.'} /></p>
+        <p className="mt-2 whitespace-pre-wrap text-[11px] leading-relaxed text-gray-500"><TtpText value={field(ai?.evidence ?? ai?.reason ?? ai?.next_debug_action)} /></p>
+      </div>
+      <div className="rounded border border-gray-800 bg-gray-950 p-3">
+        <b className="text-gray-200">API / Import Focus</b>
+        <div className="mt-2 flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
+          {apiHooks.slice(0, 80).map(value => <span key={value} className="rounded border border-gray-700 px-2 py-1 font-mono text-[10px] text-gray-300">{value}</span>)}
+          {!apiHooks.length && <span className="text-gray-600">none</span>}
+        </div>
+      </div>
+      <div className="rounded border border-gray-800 bg-gray-950 p-3">
+        <b className="text-gray-200">Memory / Runtime Notes</b>
+        <div className="mt-2 max-h-32 overflow-y-auto divide-y divide-gray-900 text-[11px] text-gray-500">
+          {memoryDiffs.length ? memoryDiffs.slice(0, 20).map((item, index) => <div key={index} className="break-all py-1">{field(item)}</div>) : <div className="py-1">No memory diff returned for this step.</div>}
+          {trace.behaviors.map(item => <div key={item} className="break-all py-1 text-gray-400"><TtpText value={item} /></div>)}
+        </div>
+      </div>
+    </div>
+  </div>;
+}
+
+function EntrypointFinding({ workspace, decompilation, onTrace }: { workspace: MalwareGraphDebuggerWorkspace; decompilation: MalwareGraphDecompilation | null; onTrace: (traceId: string) => void }) {
+  const entryTrace = workspace.function_traces.find(trace => trace.is_entrypoint || trace.name === 'entrypoint');
+  const entry = workspace.entrypoint ?? decompilation?.entrypoint_details ?? {};
+  return <div className="grid gap-3 p-3 text-xs md:grid-cols-[1fr_auto]">
+    <div className="grid gap-2 md:grid-cols-4">
+      <Info label="Status" value={field(entry.status ?? (entryTrace ? 'found' : 'missing'))} />
+      <Info label="RVA" value={field(entry.rva ?? decompilation?.entrypoint ?? entryTrace?.rva)} />
+      <Info label="VA" value={field(entry.va ?? entryTrace?.address)} />
+      <Info label="Section" value={field(entry.section ?? entryTrace?.section)} />
+    </div>
+    <div className="flex items-center">
+      <button className="secondary-action min-w-32" disabled={!entryTrace} onClick={() => entryTrace && onTrace(entryTrace.trace_id)}>Select entrypoint</button>
+    </div>
+    <div className="md:col-span-2 text-[11px] leading-relaxed text-gray-500">
+      <TtpText value={entryTrace ? `${entryTrace.summary} Source: ${entryTrace.source}. File offset: ${field(entry.file_offset) || 'unknown'}.` : 'No entrypoint trace was recovered for this target.'} />
+    </div>
+  </div>;
+}
+
+function AiAssistantPanel({ result, pending }: { result: MalwareGraphDebugAssistant | null; pending: boolean }) {
+  if (pending) return <Empty text="AI assistant is analyzing the debug workspace." />;
+  if (!result) return <Empty text="Run AI debug assistant to prioritize entrypoint validation, suspicious functions, hooks, IOC/TTP leads, and next steps." />;
+  const assessment = result.assessment ?? {};
+  const suspicious = assessment.malicious_or_suspicious_functions ?? assessment.suspicious_functions ?? [];
+  const normalCount = Math.max(0, (assessment.function_analysis?.length ?? 0) - suspicious.length);
+  return <div className="grid gap-4 p-3 text-xs xl:grid-cols-[1fr_1fr]">
+    <div className="space-y-3">
+      <div className="grid gap-2 md:grid-cols-3">
+        <Metric label="Normal" value={normalCount} />
+        <Metric label="Suspicious/Malicious" value={suspicious.length} />
+        <Metric label="TTPs" value={assessment.ttps?.length ?? 0} />
+      </div>
+      <div>
+        <b className="text-sm text-white">Whole Malware Purpose</b>
+        <p className="mt-1 whitespace-pre-wrap leading-relaxed text-gray-300"><TtpText value={field(assessment.main_purpose) || 'Main purpose was not returned.'} /></p>
+      </div>
+      <div>
+        <b className="text-gray-200">Full Debug Summary</b>
+        <p className="mt-1 whitespace-pre-wrap leading-relaxed text-gray-400"><TtpText value={field(assessment.summary) || 'No summary returned.'} /></p>
+      </div>
+      <div>
+        <b className="text-gray-200">Entrypoint</b>
+        <p className="mt-1 leading-relaxed text-gray-400"><TtpText value={field(assessment.entrypoint_assessment) || 'No entrypoint assessment returned.'} /></p>
+      </div>
+      <ObjectList title="Function Analysis" items={assessment.function_analysis ?? []} limit={80} />
+      <ListBlock title="Next Steps" items={assessment.debug_next_steps ?? []} />
+      <ListBlock title="Validation Gaps" items={assessment.validation_gaps ?? []} />
+    </div>
+    <div className="space-y-3">
+      <ObjectList title="Malicious / Suspicious Functions" items={suspicious} />
+      <ObjectList title="TTPs" items={assessment.ttps ?? []} />
+      <ObjectList title="IOCs" items={assessment.iocs ?? []} />
+      <ListBlock title="API Hooks To Prioritize" items={assessment.api_hooks_to_prioritize ?? []} mono />
+      <ObjectList title="IOC / TTP Leads" items={assessment.ioc_or_ttp_leads ?? []} />
+      <ListBlock title="Validation Gaps" items={assessment.validation_gaps ?? []} />
+      {result.error && <div className="rounded border border-amber-500/30 bg-amber-950/20 p-2 text-amber-100">{result.error}</div>}
+    </div>
+  </div>;
+}
+
+function ListBlock({ title, items, mono = false }: { title: string; items: unknown[]; mono?: boolean }) {
+  return <div>
+    <b className="text-gray-200">{title}</b>
+    <div className={`mt-2 max-h-40 overflow-y-auto rounded border border-gray-800 bg-gray-950 ${mono ? 'font-mono' : ''}`}>
+      {items.length ? items.slice(0, 40).map((item, index) => <div key={`${field(item)}-${index}`} className="border-b border-gray-900 px-2 py-1.5 text-[11px] leading-relaxed text-gray-400"><TtpText value={item} /></div>) : <div className="p-2 text-gray-600">none</div>}
+    </div>
+  </div>;
+}
+
+function ObjectList({ title, items, limit = 40 }: { title: string; items: Array<Record<string, unknown>>; limit?: number }) {
+  return <div>
+    <b className="text-gray-200">{title}</b>
+    <div className="mt-2 max-h-56 overflow-y-auto rounded border border-gray-800 bg-gray-950">
+      {items.length ? items.slice(0, limit).map((item, index) => <div key={index} className="border-b border-gray-900 p-2 text-[11px] leading-relaxed text-gray-400">
+        <ObjectHeader item={item} />
+        <div className="mt-1 space-y-1 text-gray-500">
+          {objectDetailRows(item).map(row => <div key={row.key}>
+            <span className="text-gray-600">{row.key}: </span>
+            <span className={row.mono ? 'break-all font-mono text-gray-400' : 'text-gray-500'}><TtpText value={row.value} /></span>
+          </div>)}
+        </div>
+      </div>) : <div className="p-2 text-gray-600">none</div>}
+    </div>
+  </div>;
+}
+
+function ObjectHeader({ item }: { item: Record<string, unknown> }) {
+  const title = field(item.name ?? item.attack_id ?? item.value ?? item.address ?? item.type) || 'item';
+  const href = objectRoute(item);
+  const meta = [field(item.address), field(item.risk), field(item.confidence)].filter(Boolean).join(' · ');
+  const className = "break-all font-mono text-gray-200 hover:text-mitre-accent";
+  return <div>
+    {href ? <a className={className} href={href}>{title}</a> : <div className="break-all font-mono text-gray-200"><TtpText value={title} /></div>}
+    {meta && <div className="mt-0.5 text-[10px] uppercase text-gray-600"><TtpText value={meta} /></div>}
+  </div>;
+}
+
+function objectRoute(item: Record<string, unknown>) {
+  const attackId = field(item.attack_id ?? (field(item.type) === 'ttp' ? item.value : ''));
+  if (/^T\d{4}(?:\.\d{3})?$/.test(attackId)) return `/navigator?technique=${encodeURIComponent(attackId)}`;
+  if (field(item.type) === 'ioc' || item.value) return `/ioc-library?search=${encodeURIComponent(field(item.value ?? item.name))}`;
+  return '';
+}
+
+function objectDetailRows(item: Record<string, unknown>) {
+  const keys = [
+    'role',
+    'description',
+    'reason',
+    'evidence',
+    'ttps',
+    'iocs',
+    'next_debug_action',
+    'type',
+    'value',
+  ];
+  return keys
+    .filter(key => item[key] !== undefined && item[key] !== null && field(item[key]) !== '')
+    .map(key => ({
+      key: key.replace(/_/g, ' '),
+      value: field(item[key]),
+      mono: ['value', 'iocs', 'ttps'].includes(key),
+    }));
+}
+
+function functionAiForTrace(assistant: MalwareGraphDebugAssistant | null, trace: DebugTrace): Record<string, unknown> | null {
+  const assessment = assistant?.assessment;
+  if (!assessment) return null;
+  const candidates = [
+    ...(assessment.function_analysis ?? []),
+    ...(assessment.malicious_or_suspicious_functions ?? []),
+    ...(assessment.suspicious_functions ?? []),
+  ];
+  const traceAddress = trace.address.toLowerCase();
+  const traceName = trace.name.toLowerCase();
+  return candidates.find(item => {
+    const address = field(item.address ?? item.va ?? item.rva).toLowerCase();
+    const name = field(item.name ?? item.function ?? item.function_name).toLowerCase();
+    return Boolean((address && (address === traceAddress || traceAddress.includes(address) || address.includes(traceAddress))) || (name && (name === traceName || name.includes(traceName) || traceName.includes(name))));
+  }) ?? null;
+}
+
+function functionTag(trace: DebugTrace, ai: Record<string, unknown> | null): 'normal' | 'suspicious' | 'malicious' {
+  const raw = `${field(ai?.tag)} ${field(ai?.classification)} ${field(ai?.risk)} ${field(ai?.risk_level)} ${field(ai?.verdict)} ${trace.risk_level} ${trace.behaviors.join(' ')}`.toLowerCase();
+  if (raw.includes('malicious') || raw.includes('critical') || raw.includes('high')) return 'malicious';
+  if (raw.includes('suspicious') || raw.includes('medium') || raw.includes('warn') || trace.api_hooks?.length || trace.strings_referenced.length) return 'suspicious';
+  return 'normal';
+}
+
+function tagClass(tag: 'normal' | 'suspicious' | 'malicious') {
+  if (tag === 'malicious') return 'border border-red-600/40 bg-red-950/30 text-red-300';
+  if (tag === 'suspicious') return 'border border-amber-500/40 bg-amber-950/30 text-amber-300';
+  return 'border border-green-600/40 bg-green-950/30 text-green-300';
+}
+
+function Registers({ workspace }: { workspace: MalwareGraphDebuggerWorkspace }) {
+  return <div className="max-h-80 overflow-auto">
+    <table className="w-full min-w-[420px] text-left text-xs">
+      <thead className="bg-gray-950 text-[10px] uppercase text-gray-600"><tr><th className="px-3 py-2">Register</th><th className="px-3 py-2">Entry</th><th className="px-3 py-2">Exit</th></tr></thead>
+      <tbody className="divide-y divide-gray-800">
+        {workspace.registers.map(row => <tr key={row.name}>
+          <td className="px-3 py-2 font-mono text-gray-200">{row.name}</td>
+          <td className="px-3 py-2 font-mono text-gray-500">{row.entry}</td>
+          <td className={row.changed ? 'px-3 py-2 font-mono text-mitre-accent' : 'px-3 py-2 font-mono text-gray-500'}>{row.exit}</td>
+        </tr>)}
+      </tbody>
+    </table>
+  </div>;
+}
+
+function MemoryRegions({ workspace }: { workspace: MalwareGraphDebuggerWorkspace }) {
+  return <div className="max-h-80 overflow-y-auto divide-y divide-gray-800">
+    {workspace.memory_regions.map((region, index) => <div key={`${field(region.name)}-${index}`} className="grid gap-2 p-3 text-xs md:grid-cols-4">
+      <Info label="Name" value={field(region.name)} />
+      <Info label="Address" value={field(region.address)} />
+      <Info label="Size" value={field(region.size_bytes)} />
+      <Info label="Perm" value={field(region.permissions)} />
+    </div>)}
+  </div>;
+}
+
+function ApiHooks({ workspace }: { workspace: MalwareGraphDebuggerWorkspace }) {
+  return <div className="max-h-80 overflow-y-auto divide-y divide-gray-800">
+    {workspace.api_hooks.map((hook, index) => <div key={`${field(hook.name)}-${index}`} className="p-3 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <b className="font-mono text-gray-200">{field(hook.name)}</b>
+        <span className="rounded bg-gray-800 px-1.5 py-0.5 text-[10px] text-gray-500">{field(hook.category)}</span>
+      </div>
+      <div className="mt-1 text-gray-500">{field(hook.module)} · {field(hook.status)}</div>
+    </div>)}
+    {!workspace.api_hooks.length && <Empty text="No API hooks planned." />}
+  </div>;
+}
+
+function Leads({ workspace }: { workspace: MalwareGraphDebuggerWorkspace }) {
+  return <div className="grid gap-4 p-3 text-xs md:grid-cols-2">
+    <div>
+      <b className="text-gray-200">TTP leads</b>
+      <div className="mt-2 space-y-2">
+        {workspace.attack_leads.map((lead, index) => <a key={`${field(lead.attack_id)}-${index}`} href={safeInternalHref(field(lead.navigator_route)) ?? `/navigator?technique=${encodeURIComponent(field(lead.attack_id))}`} className="block rounded border border-gray-800 p-2 hover:border-mitre-accent">
+          <div className="font-mono text-mitre-accent">{field(lead.attack_id)}</div>
+          <div className="text-gray-400">{field(lead.name)}</div>
+        </a>)}
+        {!workspace.attack_leads.length && <div className="text-gray-600">none</div>}
+      </div>
+    </div>
+    <div>
+      <b className="text-gray-200">IOC leads</b>
+      <div className="mt-2 max-h-56 overflow-y-auto space-y-2">
+        {workspace.ioc_leads.map((lead, index) => <a key={`${field(lead.value)}-${index}`} href={safeInternalHref(field(lead.adversarygraph_route)) || `/ioc-library?search=${encodeURIComponent(field(lead.value))}`} className="block rounded border border-gray-800 p-2 hover:border-mitre-accent">
+          <div className="break-all font-mono text-gray-200">{field(lead.value)}</div>
+          <div className="text-gray-500">{field(lead.type)}</div>
+        </a>)}
+        {!workspace.ioc_leads.length && <div className="text-gray-600">none</div>}
+      </div>
+    </div>
+  </div>;
+}
+
+function Events({ workspace }: { workspace: MalwareGraphDebuggerWorkspace }) {
+  const events = workspace.events.slice().reverse();
+  return <VirtualList
+    items={events}
+    height={384}
+    estimateSize={72}
+    renderItem={(event, index) => <div key={`${field(event.timestamp)}-${index}`} className="border-b border-gray-800 p-3 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <b className="text-gray-200">{field(event.type)}</b>
+        <span style={{ color: statusColor(field(event.status)) }}>{field(event.status)}</span>
+      </div>
+      <p className="mt-1 text-gray-500">{field(event.message)}</p>
+    </div>}
+  />;
+}
+
+function DecompilationPane({ result }: { result: MalwareGraphDecompilation }) {
+  const pseudocode = result.pseudocode.length ? result.pseudocode : ['// No pseudocode recovered.'];
+  return <div className="grid gap-4 p-3 xl:grid-cols-[minmax(0,1fr)_360px]">
+    <div className="min-w-0 overflow-hidden rounded border border-gray-800 bg-[#05070c]">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-800 bg-gray-950 px-3 py-2">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold text-gray-100">{result.target_name}</div>
+          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] uppercase text-gray-600">
+            <span>{result.toolchain}</span>
+            <span>{result.mode}</span>
+            <span>{result.executed ? 'executed' : 'static artifact'}</span>
+            <span>{result.status}</span>
+          </div>
+        </div>
+        <div className="flex shrink-0 rounded border border-gray-800 bg-gray-900 p-0.5 text-[10px]">
+          <span className="rounded bg-mitre-accent px-2 py-1 font-semibold text-white">Pseudocode</span>
+          <span className="px-2 py-1 text-gray-500">Strings</span>
+          <span className="px-2 py-1 text-gray-500">Imports</span>
+        </div>
+      </div>
+      <div className="grid gap-2 border-b border-gray-800 p-3 text-xs md:grid-cols-4">
+        <Info label="File type" value={result.file_type} />
+        <Info label="Entrypoint" value={result.entrypoint ?? 'unknown'} />
+        <Info label="Language" value={result.language ?? 'unknown'} />
+        <Info label="Lines" value={String(pseudocode.length)} />
+      </div>
+      <CodeEditor value={pseudocode.join('\n')} language="c" height="620px" />
+    </div>
+    <div className="space-y-3">
+      {result.warnings.length > 0 && <div className="rounded border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-100">{result.warnings.join(' ')}</div>}
+      {result.entrypoint_details && <div className="rounded border border-gray-800 bg-gray-950 p-3">
+        <b className="text-xs text-gray-200">Entrypoint details</b>
+        <div className="mt-2 grid gap-2 text-xs">
+          {Object.entries(result.entrypoint_details).map(([key, value]) => <Info key={key} label={key.replace(/_/g, ' ')} value={field(value)} />)}
+        </div>
+      </div>}
+      <div className="rounded border border-gray-800 bg-gray-950 p-3">
+        <b className="text-xs text-gray-200">Recovered APIs</b>
+        <div className="mt-2 flex max-h-40 flex-wrap gap-1.5 overflow-y-auto">
+          {result.api_calls.slice(0, 100).map(value => <span key={value} className="rounded border border-gray-700 px-2 py-1 font-mono text-[10px] text-gray-300">{value}</span>)}
+          {!result.api_calls.length && <span className="text-xs text-gray-600">none</span>}
+        </div>
+      </div>
+      <div className="rounded border border-gray-800 bg-gray-950 p-3">
+        <b className="text-xs text-gray-200">Interesting strings</b>
+        <div className="mt-2 max-h-48 overflow-y-auto divide-y divide-gray-900 font-mono text-[10px] text-gray-500">
+          {result.interesting_strings.slice(0, 80).map((value, index) => <div key={`${value}-${index}`} className="break-all py-1">{value}</div>)}
+          {!result.interesting_strings.length && <div className="text-xs text-gray-600">none</div>}
+        </div>
+      </div>
+      {result.sections && result.sections.length > 0 && <div className="rounded border border-gray-800 bg-gray-950 p-3">
+        <b className="text-xs text-gray-200">Sections</b>
+        <div className="mt-2 max-h-48 overflow-y-auto divide-y divide-gray-900">
+          {result.sections.map((section, index) => <div key={`${field(section.name)}-${index}`} className="py-2 text-[10px] text-gray-500">
+            <div className="flex items-center justify-between gap-2">
+              <b className="font-mono text-gray-300">{field(section.name) || `section ${index + 1}`}</b>
+              <span>entropy {field(section.entropy)}</span>
+            </div>
+            <div className="mt-1 font-mono">{field(section.virtual_address)} · {field(section.characteristics_flags)}</div>
+          </div>)}
+        </div>
+      </div>}
+    </div>
+  </div>;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function instructionText(row: Record<string, unknown>) {
+  const mnemonic = field(row.mnemonic);
+  const opStr = field(row.op_str ?? row.operands ?? row.operand);
+  if (mnemonic || opStr) return `${mnemonic}${opStr ? ` ${opStr}` : ''}`.trim();
+  return field(row.text) || 'db ?';
+}
+
+function instructionTone(instruction: string) {
+  const lower = instruction.toLowerCase();
+  if (lower.includes('call') || lower.includes('jmp') || lower.includes('int ')) return 'text-amber-200';
+  if (lower.includes('push') || lower.includes('pop')) return 'text-sky-200';
+  if (lower.includes('mov') || lower.includes('lea')) return 'text-gray-300';
+  if (lower.includes('ret')) return 'text-fuchsia-200';
+  return 'text-gray-400';
+}
+
+function instructionComment(trace: DebugTrace, ai: Record<string, unknown> | null, row: Record<string, unknown>, index: number) {
+  const explicit = field(row.comment ?? row.annotation ?? row.api ?? row.symbol);
+  if (explicit) return explicit;
+  const text = instructionText(row).toLowerCase();
+  const api = (trace.api_hooks ?? []).find(value => text.includes(value.toLowerCase()));
+  if (api) return `API focus: ${api}`;
+  if (index === 0) return field(ai?.purpose ?? ai?.summary ?? trace.summary);
+  if (text.includes('call')) return 'Follow call target and validate imported function resolution.';
+  if (text.includes('jmp')) return 'Branch target; compare with conditional runtime path.';
+  if (text.includes('ret')) return 'Function return boundary.';
+  return '';
+}
+
+function hasBreakpoint(workspace: MalwareGraphDebuggerWorkspace, address: string) {
+  const needle = address.toLowerCase();
+  if (!needle) return false;
+  return workspace.breakpoints.some(item => field(item.address).toLowerCase() === needle || field(item.name).toLowerCase().includes(needle));
+}
+
+function registerRowsForTrace(
+  workspace: MalwareGraphDebuggerWorkspace,
+  entryRegisters: Record<string, unknown>,
+  exitRegisters: Record<string, unknown>,
+) {
+  if (Object.keys(entryRegisters).length || Object.keys(exitRegisters).length) {
+    const names = Array.from(new Set([...Object.keys(entryRegisters), ...Object.keys(exitRegisters)])).sort();
+    return names.map(name => {
+      const entry = field(entryRegisters[name]);
+      const exit = field(exitRegisters[name]);
+      return { name, entry, exit, changed: Boolean(entry && exit && entry !== exit) };
+    });
+  }
+  return workspace.registers;
+}
+
+function stackRowsFromHex(value: string) {
+  const clean = value.replace(/[^a-fA-F0-9]/g, '');
+  if (!clean) return [];
+  const chunks = clean.match(/.{1,16}/g) ?? [];
+  return chunks.slice(0, 24).map((bytes, index) => ({
+    offset: `esp+${(index * 8).toString(16).padStart(2, '0')}`,
+    bytes: bytes.match(/.{1,2}/g)?.join(' ') ?? bytes,
+  }));
+}
+
+function nextTraceAfter(workspace: MalwareGraphDebuggerWorkspace, trace: DebugTrace) {
+  const index = workspace.function_traces.findIndex(item => item.trace_id === trace.trace_id);
+  if (index < 0) return null;
+  return workspace.function_traces[index + 1] ?? null;
+}
+
+function isFirstAnalysis(artifact: unknown): artifact is MalwareGraphFirstAnalysis {
+  if (!artifact || typeof artifact !== 'object') return false;
+  const item = artifact as Record<string, unknown>;
+  return item.type === 'first-analysis'
+    && typeof item.target_entity_id === 'string'
+    && typeof item.target_name === 'string'
+    && typeof item.entropy === 'number';
+}
+
+function normalizeDecompilation(value: unknown): MalwareGraphDecompilation | null {
+  if (!value || typeof value !== 'object') return null;
+  const item = value as Record<string, unknown>;
+  if (item.type !== 'decompilation' || typeof item.target_entity_id !== 'string') return null;
+  return {
+    artifact_id: field(item.artifact_id) || `${field(item.target_entity_id)}--decompilation`,
+    type: 'decompilation',
+    target_entity_id: field(item.target_entity_id),
+    target_name: field(item.target_name) || field(item.target_entity_id),
+    file_type: field(item.file_type) || 'unknown',
+    status: field(item.status) || 'completed',
+    toolchain: field(item.toolchain) || 'unknown',
+    mode: field(item.mode) || 'static',
+    executed: Boolean(item.executed),
+    language: field(item.language) || undefined,
+    entrypoint: field(item.entrypoint) || undefined,
+    entrypoint_details: item.entrypoint_details && typeof item.entrypoint_details === 'object' ? item.entrypoint_details as Record<string, unknown> : undefined,
+    api_calls: Array.isArray(item.api_calls) ? item.api_calls.map(field).filter(Boolean) : [],
+    interesting_strings: Array.isArray(item.interesting_strings) ? item.interesting_strings.map(field).filter(Boolean) : [],
+    pseudocode: Array.isArray(item.pseudocode) ? item.pseudocode.map(field).filter(Boolean) : [],
+    source_preview: Array.isArray(item.source_preview) ? item.source_preview.map(field).filter(Boolean) : undefined,
+    android_references: Array.isArray(item.android_references) ? item.android_references.map(field).filter(Boolean) : undefined,
+    sections: Array.isArray(item.sections) ? item.sections.filter(section => section && typeof section === 'object') as Array<Record<string, unknown>> : undefined,
+    warnings: Array.isArray(item.warnings) ? item.warnings.map(field).filter(Boolean) : [],
+  };
+}
+
+function Panel({ title, children }: { title: string; children: ReactNode }) {
+  return <section className="overflow-hidden rounded border border-gray-800 bg-gray-900/40">
+    <div className="border-b border-gray-800 px-3 py-2 text-sm font-semibold text-white">{title}</div>
+    {children}
+  </section>;
+}
+
+function Metric({ label, value }: { label: string; value: number | string }) {
+  return <div className="rounded border border-gray-800 bg-gray-900/60 p-3"><div className="truncate text-2xl font-semibold text-white">{value}</div><div className="text-xs text-gray-500">{label}</div></div>;
+}
+
+function Info({ label, value }: { label: string; value: string }) {
+  return <div className="rounded bg-gray-900 p-2">
+    <div className="text-[10px] uppercase text-gray-600">{label}</div>
+    <div className="mt-1 break-all font-mono text-[11px] text-gray-300"><TtpText value={value} /></div>
+  </div>;
+}
+
+function Empty({ text }: { text: string }) {
+  return <div className="p-4 text-center text-xs text-gray-600">{text}</div>;
+}
+
+function field(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '';
+  if (typeof value === 'number') return Number.isInteger(value) ? value.toLocaleString() : value.toFixed(3);
+  if (typeof value === 'string') return value;
+  if (typeof value === 'boolean') return value ? 'yes' : 'no';
+  if (Array.isArray(value)) return value.map(item => field(item)).join(', ');
+  return String(value);
+}
+
+const ATTACK_ID_PATTERN = /\bT\d{4}(?:\.\d{3})?\b/gi;
+
+function TtpText({
+  value,
+  className = '',
+  linkClassName = 'font-mono text-mitre-accent hover:underline',
+}: {
+  value: unknown;
+  className?: string;
+  linkClassName?: string;
+}) {
+  const text = field(value);
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  for (const match of text.matchAll(ATTACK_ID_PATTERN)) {
+    const id = match[0].toUpperCase();
+    const index = match.index ?? 0;
+    if (index > cursor) parts.push(text.slice(cursor, index));
+    parts.push(<a key={`${id}-${index}`} href={`/navigator?technique=${encodeURIComponent(id)}`} className={linkClassName}>{id}</a>);
+    cursor = index + match[0].length;
+  }
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return <span className={className}>{parts.length ? parts : text}</span>;
+}
+
+function isMissingDebugWorkspace(error: unknown) {
+  return String(error).toLowerCase().includes('debug workspace not found');
+}
+
+function riskColor(risk: string) {
+  if (risk === 'CRITICAL') return '#f87171';
+  if (risk === 'HIGH') return '#ef4444';
+  if (risk === 'MEDIUM') return '#f59e0b';
+  if (risk === 'LOW') return '#22c55e';
+  return '#64748b';
+}
+
+function riskLane(risk: string) {
+  if (risk === 'HIGH' || risk === 'CRITICAL') return 0;
+  if (risk === 'MEDIUM') return 1;
+  if (risk === 'LOW') return 2;
+  return 3;
+}
+
+function statusColor(status: string) {
+  if (status === 'completed') return '#22c55e';
+  if (status === 'blocked') return '#ef4444';
+  if (status === 'requires-dynamic-checkbox') return '#f59e0b';
+  if (status === 'ready' || status === 'selected') return '#38bdf8';
+  if (status === 'planned') return '#a78bfa';
+  return '#f59e0b';
+}
+
+function shortLabel(value: string, limit: number) {
+  return value.length <= limit ? value : `${value.slice(0, Math.max(0, limit - 3))}...`;
+}

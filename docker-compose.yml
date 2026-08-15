@@ -1,0 +1,826 @@
+# Base Compose file for source-built controlled deployments. For development,
+# overlay the dev overrides:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up
+#
+# The dev override file re-adds --reload for the API, source bind-mounts for
+# hot-reloading, and replaces the nginx frontend with the Vite dev server.
+#
+# Custom services use local build tags and pull_policy=never in this source
+# stack. This makes `docker compose pull` skip those build targets instead of
+# querying a registry for unqualified `adversarygraph-*:local-scan` images;
+# `docker compose up --build` creates them on first start or after source changes.
+# The production overlay changes the policy to `missing` and the production
+# preflight requires every custom image to be supplied by immutable digest.
+services:
+  postgres:
+    image: ${ADVERSARYGRAPH_POSTGRES_IMAGE:-adversarygraph-postgres:local-scan}
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
+    restart: unless-stopped
+    entrypoint: ["/usr/local/bin/adversarygraph-postgres-entrypoint.sh"]
+    command: ["postgres", "-c", "unix_socket_directories=/var/run/postgresql,/var/run/postgresql-shared"]
+    environment:
+      POSTGRES_DB: ${DB_NAME:-adversarygraph}
+      POSTGRES_USER: ${DB_USER:-ag_user}
+      POSTGRES_PASSWORD: ${DB_PASS:?DB_PASS is required; copy .env.example to .env and set a strong value}
+    volumes:
+      - ${ADVERSARYGRAPH_DB_DIR:-./data/postgres}:/var/lib/postgresql/data
+      - pg_socket:/var/run/postgresql-shared
+      - ./scripts/postgres-entrypoint.sh:/usr/local/bin/adversarygraph-postgres-entrypoint.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ag_user} -d ${DB_NAME:-adversarygraph}"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '1.0'
+
+  db-apply-env-creds:
+    image: ${ADVERSARYGRAPH_POSTGRES_IMAGE:-adversarygraph-postgres:local-scan}
+    pull_policy: never
+    profiles: ["tools"]
+    restart: "no"
+    environment:
+      POSTGRES_DB: ${DB_NAME:-adversarygraph}
+      POSTGRES_USER: ${DB_USER:-ag_user}
+      POSTGRES_PASSWORD: ${DB_PASS:?DB_PASS is required; copy .env.example to .env and set a strong value}
+    volumes:
+      - pg_socket:/var/run/postgresql-shared
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - sh
+      - -lc
+      - |
+        psql -h /var/run/postgresql-shared -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" \
+          -v user="$$POSTGRES_USER" -v pass="$$POSTGRES_PASSWORD" <<'SQL'
+        ALTER USER :"user" WITH PASSWORD :'pass';
+        SQL
+        echo "Applied .env PostgreSQL password for role $$POSTGRES_USER"
+
+  selftest:
+    image: ${BUSYBOX_IMAGE:-busybox:1.36@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662}
+    restart: "no"
+    environment:
+      SELFTEST_TIMEOUT: ${SELFTEST_TIMEOUT:-900}
+      SELFTEST_INTERVAL: ${SELFTEST_INTERVAL:-3}
+    depends_on:
+      api:
+        condition: service_started
+    command:
+      - sh
+      - -lc
+      - |
+        set -eu
+        max="$${SELFTEST_TIMEOUT:-900}"
+        interval="$${SELFTEST_INTERVAL:-3}"
+        case "$$max" in
+          ''|*[!0-9]*) echo "SELFTEST_TIMEOUT must be a non-negative integer." >&2; exit 2 ;;
+        esac
+        case "$$interval" in
+          ''|0|*[!0-9]*) echo "SELFTEST_INTERVAL must be a positive integer." >&2; exit 2 ;;
+        esac
+        elapsed=0
+        while [ "$$elapsed" -le "$$max" ]; do
+          if startup="$$(wget -q -O - http://api:8000/api/system/startup 2>/tmp/selftest.err)"; then
+            if printf '%s\n' "$$startup" | grep -Eq '^[[:space:]]*\{[[:space:]]*"status"[[:space:]]*:[[:space:]]*"starting"([[:space:]]*,|[[:space:]]*\})'; then
+              echo "Reference ingestion is still running ($$elapsed/$$max seconds)."
+              sleep "$$interval"
+              elapsed=$$((elapsed + interval))
+              continue
+            fi
+            if printf '%s\n' "$$startup" | grep -Eq '^[[:space:]]*\{[[:space:]]*"status"[[:space:]]*:[[:space:]]*"degraded"([[:space:]]*,|[[:space:]]*\})'; then
+              echo "$$startup" >&2
+              echo "AdversaryGraph startup is degraded; reference ingestion failed." >&2
+              exit 1
+            fi
+          fi
+          if response="$$(wget -q -O - http://api:8000/api/system/selftest 2>/tmp/selftest.err)"; then
+            echo "$$response"
+            if printf '%s\n' "$$response" | grep -Eq '^[[:space:]]*\{[[:space:]]*"status"[[:space:]]*:[[:space:]]*"ok"([[:space:]]*,|[[:space:]]*\})'; then
+              echo "AdversaryGraph self-test passed."
+              exit 0
+            fi
+            echo "AdversaryGraph self-test returned a non-passing status." >&2
+            exit 1
+          fi
+          err="$$(cat /tmp/selftest.err 2>/dev/null || true)"
+          if echo "$$err" | grep -Eq '401|403'; then
+            if readiness="$$(wget -q -O - http://api:8000/api/ready 2>/tmp/selftest.err)"; then
+              echo "$$readiness"
+              if printf '%s\n' "$$readiness" | grep -Eq '^[[:space:]]*\{[[:space:]]*"status"[[:space:]]*:[[:space:]]*"ready"([[:space:]]*,|[[:space:]]*\})'; then
+                echo "AdversaryGraph readiness check passed, but the full self-test is auth-protected." >&2
+                echo "Readiness alone is not a passing self-test; run an authenticated full self-test." >&2
+                exit 3
+              fi
+              echo "AdversaryGraph readiness returned a non-ready status." >&2
+              exit 1
+            fi
+          fi
+          echo "Waiting for AdversaryGraph self-test ($$elapsed/$$max seconds): $$err"
+          sleep "$$interval"
+          elapsed=$$((elapsed + interval))
+        done
+        echo "AdversaryGraph self-test timed out." >&2
+        exit 1
+
+  redis:
+    image: ${REDIS_IMAGE:-redis:7-alpine@sha256:6ab0b6e7381779332f97b8ca76193e45b0756f38d4c0dcda72dbb3c32061ab99}
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD is required; set a strong value in .env}
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?REDIS_PASSWORD is required; set a strong value in .env}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: '0.5'
+
+  # Reconcile persistent MalwareGraph storage before either non-root consumer
+  # starts. MalwareGraph owns the volume (UID 10001); the backend API (GID 999)
+  # also needs bounded access for reviewed unpack exports.
+  malwaregraph-storage-permissions:
+    image: ${BUSYBOX_IMAGE:-busybox:1.36@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662}
+    command: >-
+      sh -c "mkdir -p
+      /app/storage/quarantine
+      /app/storage/artifacts
+      /app/storage/saved-outputs
+      /app/storage/logs
+      && chown -R 10001:999 /app/storage
+      && chmod -R u+rwX,g+rX,o-rwx /app/storage
+      && chmod 2770
+      /app/storage
+      /app/storage/quarantine
+      /app/storage/artifacts
+      /app/storage/saved-outputs
+      /app/storage/logs"
+    user: "0:0"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+    volumes:
+      - type: volume
+        source: malwaregraph_storage
+        target: /app/storage
+        volume:
+          nocopy: true
+    restart: "no"
+
+  malwaregraph:
+    image: ${ADVERSARYGRAPH_MALWAREGRAPH_IMAGE:-adversarygraph-malwaregraph:local-scan}
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: docker/malwaregraph/Dockerfile
+      args:
+        MALWAREGRAPH_REF: ${MALWAREGRAPH_REF:-79f604c6b59522cc993c82d32e081e8357bba98a}
+    restart: unless-stopped
+    environment:
+      HOME: /tmp
+      MALWAREGRAPH_STORAGE_DIR: /app/storage
+      MALWAREGRAPH_API_KEY: ${MALWAREGRAPH_API_KEY:-}
+      MALWAREGRAPH_RETENTION_DAYS: ${MALWAREGRAPH_RETENTION_DAYS:-7}
+      MALWAREGRAPH_ENABLE_DYNAMIC_DEBUG: ${MALWAREGRAPH_ENABLE_DYNAMIC_DEBUG:-false}
+      MALWAREGRAPH_LOG_LEVEL: ${MALWAREGRAPH_LOG_LEVEL:-info}
+      MALWAREGRAPH_MAX_LOG_BYTES: ${MALWAREGRAPH_MAX_LOG_BYTES:-10485760}
+      MALWAREGRAPH_LOG_BACKUP_COUNT: ${MALWAREGRAPH_LOG_BACKUP_COUNT:-5}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
+      MINIMAX_MODEL: ${MINIMAX_MODEL:-MiniMax-M2.7}
+      MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-https://api.minimax.io/v1}
+      LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      LOCAL_LLM_API_KEY: ${LOCAL_LLM_API_KEY:-local}
+      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-llama3.1:8b}
+      ADVERSARYGRAPH_LLM_PROXY_URL: http://api:8000/api/malwaregraph/llm/complete
+      MALWAREGRAPH_AI_STRING_TIMEOUT_SECONDS: ${MALWAREGRAPH_AI_STRING_TIMEOUT_SECONDS:-180}
+      MALWAREGRAPH_AI_STRING_PROMPT_MAX_CHARS: ${MALWAREGRAPH_AI_STRING_PROMPT_MAX_CHARS:-120000}
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 256
+    mem_limit: 1g
+    cpus: 1.5
+    tmpfs:
+      - /tmp:size=256m,noexec,nosuid,nodev
+    volumes:
+      - malwaregraph_storage:/app/storage
+    depends_on:
+      malwaregraph-storage-permissions:
+        condition: service_completed_successfully
+    networks:
+      - malwaregraph_internal
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8100/api/health', timeout=3).read()",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  attack-lab-web:
+    image: ${ADVERSARYGRAPH_ATTACK_LAB_WEB_IMAGE:-adversarygraph-attack-lab-web:local-scan}
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: docker/attack-lab-web/Dockerfile
+    restart: unless-stopped
+    environment:
+      ATTACK_LAB_WEB_HOST: 127.0.0.1
+      ATTACK_LAB_WEB_PORT: 8081
+      ATTACK_LAB_WEB_LOG_DIR: /app/logs
+    volumes:
+      - type: volume
+        source: adversarygraph_logs
+        target: /app/logs
+        volume:
+          nocopy: true
+    depends_on:
+      logs-permissions:
+        condition: service_completed_successfully
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 0.5
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3).read()",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  attack-lab-endpoint:
+    image: ${ADVERSARYGRAPH_ATTACK_LAB_ENDPOINT_IMAGE:-adversarygraph-attack-lab-endpoint:local-scan}
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: docker/attack-lab-endpoint/Dockerfile
+    restart: unless-stopped
+    environment:
+      ATTACK_LAB_ENDPOINT_HOST: 0.0.0.0
+      ATTACK_LAB_ENDPOINT_PORT: 8090
+      ATTACK_LAB_ENDPOINT_LOG_DIR: /app/logs
+    volumes:
+      - type: volume
+        source: adversarygraph_logs
+        target: /app/logs
+        volume:
+          nocopy: true
+    depends_on:
+      logs-permissions:
+        condition: service_completed_successfully
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    mem_limit: 256m
+    cpus: 0.5
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid,nodev
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health', timeout=3).read()",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  attck-data-permissions:
+    image: ${BUSYBOX_IMAGE:-busybox:1.36@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662}
+    command: sh -c "mkdir -p /app/data/attck && chown -R 999:999 /app/data/attck && chmod -R u+rwX,g+rwX /app/data/attck"
+    user: "0:0"
+    volumes:
+      - attck_data:/app/data/attck
+    restart: "no"
+
+  # Initialize the shared log volume before concurrent non-root writers start.
+  # nocopy prevents Docker from racing image-directory copy-up on a fresh volume.
+  logs-permissions:
+    image: ${BUSYBOX_IMAGE:-busybox:1.36@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662}
+    command: sh -c "mkdir -p /app/logs/attack-simulation && chown -R 999:999 /app/logs && chmod -R u+rwX,g+rwX,o-rwx /app/logs"
+    user: "0:0"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+    volumes:
+      - type: volume
+        source: adversarygraph_logs
+        target: /app/logs
+        volume:
+          nocopy: true
+    restart: "no"
+
+  api:
+    image: ${ADVERSARYGRAPH_BACKEND_IMAGE:-adversarygraph-backend:local-scan}
+    pull_policy: never
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+    volumes:
+      - attck_data:/app/data/attck
+      - type: volume
+        source: adversarygraph_logs
+        target: /app/logs
+        volume:
+          nocopy: true
+      - malwaregraph_storage:/malwaregraph-storage
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-adversarygraph}
+      DB_USER: ${DB_USER:-ag_user}
+      DB_PASS: ${DB_PASS:?DB_PASS is required; set a strong value in .env}
+      ADVERSARYGRAPH_DB_DIR: ${ADVERSARYGRAPH_DB_DIR:-./data/postgres}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required; set a strong value in .env}@redis:6379/0
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
+      MINIMAX_MODEL: ${MINIMAX_MODEL:-MiniMax-M2.7}
+      MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-https://api.minimax.io/v1}
+      LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      LOCAL_LLM_API_KEY: ${LOCAL_LLM_API_KEY:-local}
+      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-llama3.1:8b}
+      THREAT_HUNTING_AI_ENABLED: ${THREAT_HUNTING_AI_ENABLED:-true}
+      THREAT_HUNTING_AI_CLOUD_ENABLED: ${THREAT_HUNTING_AI_CLOUD_ENABLED:-false}
+      THREAT_HUNTING_AI_DEFAULT_PROVIDER: ${THREAT_HUNTING_AI_DEFAULT_PROVIDER:-local}
+      THREAT_HUNTING_AI_TIMEOUT_SECONDS: ${THREAT_HUNTING_AI_TIMEOUT_SECONDS:-45}
+      THREAT_HUNTING_AI_SOURCE_CHAR_LIMIT: ${THREAT_HUNTING_AI_SOURCE_CHAR_LIMIT:-40000}
+      THREAT_HUNTING_AI_MAX_CANDIDATES: ${THREAT_HUNTING_AI_MAX_CANDIDATES:-3}
+      RAG_ENABLED: ${RAG_ENABLED:-true}
+      RAG_EMBEDDING_ENABLED: ${RAG_EMBEDDING_ENABLED:-false}
+      RAG_EMBEDDING_PROVIDER: ${RAG_EMBEDDING_PROVIDER:-local}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-nomic-embed-text}
+      RAG_EMBEDDING_DIMENSIONS: ${RAG_EMBEDDING_DIMENSIONS:-768}
+      RAG_EMBEDDING_BATCH_SIZE: ${RAG_EMBEDDING_BATCH_SIZE:-32}
+      RAG_VECTOR_MAX_COSINE_DISTANCE: ${RAG_VECTOR_MAX_COSINE_DISTANCE:-0.55}
+      RAG_CHUNK_CHARS: ${RAG_CHUNK_CHARS:-3500}
+      RAG_CHUNK_OVERLAP_CHARS: ${RAG_CHUNK_OVERLAP_CHARS:-350}
+      RAG_DEFAULT_RESULT_LIMIT: ${RAG_DEFAULT_RESULT_LIMIT:-12}
+      RAG_MAX_CONTEXT_CHARS: ${RAG_MAX_CONTEXT_CHARS:-32000}
+      RAG_RECONCILE_HOUR: ${RAG_RECONCILE_HOUR:-4}
+      RAG_RECONCILE_MINUTE: ${RAG_RECONCILE_MINUTE:-15}
+      RAG_TOMBSTONE_RETENTION_DAYS: ${RAG_TOMBSTONE_RETENTION_DAYS:-30}
+      RAG_ASSISTANCE_RETENTION_DAYS: ${RAG_ASSISTANCE_RETENTION_DAYS:-90}
+      RAG_RETENTION_BATCH_SIZE: ${RAG_RETENTION_BATCH_SIZE:-1000}
+      RAG_RETENTION_MAX_BATCHES: ${RAG_RETENTION_MAX_BATCHES:-20}
+      RAG_RETENTION_HOUR: ${RAG_RETENTION_HOUR:-4}
+      RAG_RETENTION_MINUTE: ${RAG_RETENTION_MINUTE:-45}
+      ATTCK_DOMAINS: ${ATTCK_DOMAINS:-enterprise-attack,mobile-attack,ics-attack,atlas}
+      ATTCK_DATA_DIR: /app/data/attck
+      THREATFOX_AUTH_KEY: ${THREATFOX_AUTH_KEY:-}
+      AUTO_IOC_FULL_SYNC_ON_STARTUP: ${AUTO_IOC_FULL_SYNC_ON_STARTUP:-true}
+      AUTO_THREATFOX_SYNC_DAYS: ${AUTO_THREATFOX_SYNC_DAYS:-7}
+      DYNAMIC_DB_SYNC_HOUR: ${DYNAMIC_DB_SYNC_HOUR:-3}
+      DYNAMIC_DB_SYNC_MINUTE: ${DYNAMIC_DB_SYNC_MINUTE:-30}
+      DYNAMIC_DB_IOC_SYNC_DAYS: ${DYNAMIC_DB_IOC_SYNC_DAYS:-7}
+      OTX_API_KEY: ${OTX_API_KEY:-}
+      VIRUSTOTAL_API_KEY: ${VIRUSTOTAL_API_KEY:-}
+      URLSCAN_API_KEY: ${URLSCAN_API_KEY:-}
+      GREYNOISE_API_KEY: ${GREYNOISE_API_KEY:-}
+      SHODAN_API_KEY: ${SHODAN_API_KEY:-}
+      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
+      CENSYS_API_KEY: ${CENSYS_API_KEY:-}
+      CENSYS_ORG_ID: ${CENSYS_ORG_ID:-}
+      ASSET_SCANNER_ENABLED: ${ASSET_SCANNER_ENABLED:-true}
+      ASSET_SCANNER_NMAP_ENABLED: ${ASSET_SCANNER_NMAP_ENABLED:-true}
+      ASSET_SCANNER_WEB_PROBE_ENABLED: ${ASSET_SCANNER_WEB_PROBE_ENABLED:-true}
+      ASSET_SCANNER_NMAP_BINARY: ${ASSET_SCANNER_NMAP_BINARY:-/usr/bin/nmap}
+      ASSET_SCANNER_TIMEOUT_SECONDS: ${ASSET_SCANNER_TIMEOUT_SECONDS:-120}
+      ASSET_SCANNER_WEB_PROBE_TIMEOUT_SECONDS: ${ASSET_SCANNER_WEB_PROBE_TIMEOUT_SECONDS:-15}
+      ASSET_SCANNER_TOP_PORTS: ${ASSET_SCANNER_TOP_PORTS:-100}
+      ASSET_SCANNER_MAX_RESOLVED_IPS: ${ASSET_SCANNER_MAX_RESOLVED_IPS:-4}
+      NVD_API_KEY: ${NVD_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITLAB_TOKEN: ${GITLAB_TOKEN:-}
+      MSRC_API_KEY: ${MSRC_API_KEY:-}
+      DEPS_DEV_API_KEY: ${DEPS_DEV_API_KEY:-}
+      VULNCHECK_API_KEY: ${VULNCHECK_API_KEY:-}
+      SNYK_TOKEN: ${SNYK_TOKEN:-}
+      SOCKET_TOKEN: ${SOCKET_TOKEN:-}
+      ENDOFLIFE_DATE_TOKEN: ${ENDOFLIFE_DATE_TOKEN:-}
+      HIBP_API_KEY: ${HIBP_API_KEY:-}
+      LEAKIX_API_KEY: ${LEAKIX_API_KEY:-}
+      SPYCLOUD_API_KEY: ${SPYCLOUD_API_KEY:-}
+      FLARE_API_KEY: ${FLARE_API_KEY:-}
+      DARKOWL_API_KEY: ${DARKOWL_API_KEY:-}
+      INTEL471_API_KEY: ${INTEL471_API_KEY:-}
+      KELA_API_KEY: ${KELA_API_KEY:-}
+      RECORDED_FUTURE_API_KEY: ${RECORDED_FUTURE_API_KEY:-}
+      OPENCTI_URL: ${OPENCTI_URL:-}
+      OPENCTI_TOKEN: ${OPENCTI_TOKEN:-}
+      OPENCTI_SYNC_LIMIT: ${OPENCTI_SYNC_LIMIT:-500}
+      OPENCTI_VERIFY_TLS: ${OPENCTI_VERIFY_TLS:-true}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_DIR: /app/logs
+      ATTACK_LAB_WEB_URL: ${ATTACK_LAB_WEB_URL:-http://attack-lab-web:8080}
+      ATTACK_LAB_ENDPOINT_URL: ${ATTACK_LAB_ENDPOINT_URL:-http://attack-lab-endpoint:8090}
+      LOG_MAX_BYTES: ${LOG_MAX_BYTES:-10485760}
+      LOG_BACKUP_COUNT: ${LOG_BACKUP_COUNT:-5}
+      AUTH_ENABLED: ${AUTH_ENABLED:-false}
+      AUTH_SSO_MODE: ${AUTH_SSO_MODE:-proxy}
+      AUTH_DEFAULT_ROLE: ${AUTH_DEFAULT_ROLE:-viewer}
+      AUTH_SESSION_MINUTES: ${AUTH_SESSION_MINUTES:-720}
+      AUTH_PASSWORD_MIN_LENGTH: ${AUTH_PASSWORD_MIN_LENGTH:-12}
+      AUTH_PASSWORD_REQUIRE_UPPER: ${AUTH_PASSWORD_REQUIRE_UPPER:-false}
+      AUTH_PASSWORD_REQUIRE_LOWER: ${AUTH_PASSWORD_REQUIRE_LOWER:-false}
+      AUTH_PASSWORD_REQUIRE_NUMBER: ${AUTH_PASSWORD_REQUIRE_NUMBER:-false}
+      AUTH_PASSWORD_REQUIRE_SPECIAL: ${AUTH_PASSWORD_REQUIRE_SPECIAL:-false}
+      AUTH_MFA_ENABLED: ${AUTH_MFA_ENABLED:-false}
+      AUTH_BOOTSTRAP_ADMIN_USERNAME: ${AUTH_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      AUTH_BOOTSTRAP_ADMIN_PASSWORD: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:-}
+      PROXY_SECRET: ${PROXY_SECRET:-}
+      RATE_LIMIT_PROXY_SECRET: ${RATE_LIMIT_PROXY_SECRET:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      MALWAREGRAPH_URL: http://malwaregraph:8100
+      MALWAREGRAPH_API_KEY: ${MALWAREGRAPH_API_KEY:-}
+      MALWAREGRAPH_STORAGE_DIR: /malwaregraph-storage
+      MALWAREGRAPH_REQUEST_TIMEOUT_SECONDS: ${MALWAREGRAPH_REQUEST_TIMEOUT_SECONDS:-30}
+      MALWAREGRAPH_UPLOAD_TIMEOUT_SECONDS: ${MALWAREGRAPH_UPLOAD_TIMEOUT_SECONDS:-180}
+      MALWAREGRAPH_LONG_TIMEOUT_SECONDS: ${MALWAREGRAPH_LONG_TIMEOUT_SECONDS:-300}
+      MALWAREGRAPH_MAX_UPLOAD_BYTES: ${MALWAREGRAPH_MAX_UPLOAD_BYTES:-268435456}
+      SECURE_COOKIES: ${SECURE_COOKIES:-false}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/api/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      malwaregraph:
+        condition: service_healthy
+      attack-lab-web:
+        condition: service_healthy
+      attack-lab-endpoint:
+        condition: service_healthy
+      attck-data-permissions:
+        condition: service_completed_successfully
+      logs-permissions:
+        condition: service_completed_successfully
+    networks:
+      - default
+      - malwaregraph_internal
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: '2.0'
+    # API is only reachable via the internal compose network (e.g. through the
+    # frontend or a reverse proxy). Port 8000 is NOT published to the host.
+
+  worker:
+    image: ${ADVERSARYGRAPH_BACKEND_IMAGE:-adversarygraph-backend:local-scan}
+    pull_policy: never
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2
+    volumes:
+      - attck_data:/app/data/attck
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-adversarygraph}
+      DB_USER: ${DB_USER:-ag_user}
+      DB_PASS: ${DB_PASS:?DB_PASS is required; set a strong value in .env}
+      ADVERSARYGRAPH_DB_DIR: ${ADVERSARYGRAPH_DB_DIR:-./data/postgres}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required; set a strong value in .env}@redis:6379/0
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
+      MINIMAX_API_KEY: ${MINIMAX_API_KEY:-}
+      MINIMAX_MODEL: ${MINIMAX_MODEL:-MiniMax-M2.7}
+      MINIMAX_BASE_URL: ${MINIMAX_BASE_URL:-https://api.minimax.io/v1}
+      LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-http://host.docker.internal:11434/v1}
+      LOCAL_LLM_API_KEY: ${LOCAL_LLM_API_KEY:-local}
+      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-llama3.1:8b}
+      RAG_ENABLED: ${RAG_ENABLED:-true}
+      RAG_EMBEDDING_ENABLED: ${RAG_EMBEDDING_ENABLED:-false}
+      RAG_EMBEDDING_PROVIDER: ${RAG_EMBEDDING_PROVIDER:-local}
+      RAG_EMBEDDING_MODEL: ${RAG_EMBEDDING_MODEL:-nomic-embed-text}
+      RAG_EMBEDDING_DIMENSIONS: ${RAG_EMBEDDING_DIMENSIONS:-768}
+      RAG_EMBEDDING_BATCH_SIZE: ${RAG_EMBEDDING_BATCH_SIZE:-32}
+      RAG_VECTOR_MAX_COSINE_DISTANCE: ${RAG_VECTOR_MAX_COSINE_DISTANCE:-0.55}
+      RAG_CHUNK_CHARS: ${RAG_CHUNK_CHARS:-3500}
+      RAG_CHUNK_OVERLAP_CHARS: ${RAG_CHUNK_OVERLAP_CHARS:-350}
+      RAG_RECONCILE_HOUR: ${RAG_RECONCILE_HOUR:-4}
+      RAG_RECONCILE_MINUTE: ${RAG_RECONCILE_MINUTE:-15}
+      RAG_TOMBSTONE_RETENTION_DAYS: ${RAG_TOMBSTONE_RETENTION_DAYS:-30}
+      RAG_ASSISTANCE_RETENTION_DAYS: ${RAG_ASSISTANCE_RETENTION_DAYS:-90}
+      RAG_RETENTION_BATCH_SIZE: ${RAG_RETENTION_BATCH_SIZE:-1000}
+      RAG_RETENTION_MAX_BATCHES: ${RAG_RETENTION_MAX_BATCHES:-20}
+      RAG_RETENTION_HOUR: ${RAG_RETENTION_HOUR:-4}
+      RAG_RETENTION_MINUTE: ${RAG_RETENTION_MINUTE:-45}
+      ATTCK_DATA_DIR: /app/data/attck
+      THREATFOX_AUTH_KEY: ${THREATFOX_AUTH_KEY:-}
+      AUTO_IOC_FULL_SYNC_ON_STARTUP: ${AUTO_IOC_FULL_SYNC_ON_STARTUP:-true}
+      AUTO_THREATFOX_SYNC_DAYS: ${AUTO_THREATFOX_SYNC_DAYS:-7}
+      DYNAMIC_DB_IOC_SYNC_DAYS: ${DYNAMIC_DB_IOC_SYNC_DAYS:-7}
+      OTX_API_KEY: ${OTX_API_KEY:-}
+      VIRUSTOTAL_API_KEY: ${VIRUSTOTAL_API_KEY:-}
+      URLSCAN_API_KEY: ${URLSCAN_API_KEY:-}
+      GREYNOISE_API_KEY: ${GREYNOISE_API_KEY:-}
+      SHODAN_API_KEY: ${SHODAN_API_KEY:-}
+      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
+      CENSYS_API_KEY: ${CENSYS_API_KEY:-}
+      CENSYS_ORG_ID: ${CENSYS_ORG_ID:-}
+      NVD_API_KEY: ${NVD_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITLAB_TOKEN: ${GITLAB_TOKEN:-}
+      MSRC_API_KEY: ${MSRC_API_KEY:-}
+      DEPS_DEV_API_KEY: ${DEPS_DEV_API_KEY:-}
+      VULNCHECK_API_KEY: ${VULNCHECK_API_KEY:-}
+      SNYK_TOKEN: ${SNYK_TOKEN:-}
+      SOCKET_TOKEN: ${SOCKET_TOKEN:-}
+      ENDOFLIFE_DATE_TOKEN: ${ENDOFLIFE_DATE_TOKEN:-}
+      HIBP_API_KEY: ${HIBP_API_KEY:-}
+      LEAKIX_API_KEY: ${LEAKIX_API_KEY:-}
+      SPYCLOUD_API_KEY: ${SPYCLOUD_API_KEY:-}
+      FLARE_API_KEY: ${FLARE_API_KEY:-}
+      DARKOWL_API_KEY: ${DARKOWL_API_KEY:-}
+      INTEL471_API_KEY: ${INTEL471_API_KEY:-}
+      KELA_API_KEY: ${KELA_API_KEY:-}
+      RECORDED_FUTURE_API_KEY: ${RECORDED_FUTURE_API_KEY:-}
+      OPENCTI_URL: ${OPENCTI_URL:-}
+      OPENCTI_TOKEN: ${OPENCTI_TOKEN:-}
+      OPENCTI_SYNC_LIMIT: ${OPENCTI_SYNC_LIMIT:-500}
+      OPENCTI_VERIFY_TLS: ${OPENCTI_VERIFY_TLS:-true}
+      AUTH_ENABLED: ${AUTH_ENABLED:-false}
+      AUTH_DEFAULT_ROLE: ${AUTH_DEFAULT_ROLE:-viewer}
+      AUTH_SESSION_MINUTES: ${AUTH_SESSION_MINUTES:-720}
+      AUTH_BOOTSTRAP_ADMIN_USERNAME: ${AUTH_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      AUTH_BOOTSTRAP_ADMIN_PASSWORD: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_started
+      attck-data-permissions:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "celery -A app.tasks.celery_app inspect ping --destination celery@$$HOSTNAME --timeout=5 2>/dev/null | grep -q pong",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+          cpus: '2.0'
+
+  beat:
+    image: ${ADVERSARYGRAPH_BACKEND_IMAGE:-adversarygraph-backend:local-scan}
+    pull_policy: never
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: celery -A app.tasks.celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+    volumes:
+      - attck_data:/app/data/attck
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-adversarygraph}
+      DB_USER: ${DB_USER:-ag_user}
+      DB_PASS: ${DB_PASS:?DB_PASS is required; set a strong value in .env}
+      ADVERSARYGRAPH_DB_DIR: ${ADVERSARYGRAPH_DB_DIR:-./data/postgres}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required; set a strong value in .env}@redis:6379/0
+      ATTCK_DATA_DIR: /app/data/attck
+      THREATFOX_AUTH_KEY: ${THREATFOX_AUTH_KEY:-}
+      OTX_API_KEY: ${OTX_API_KEY:-}
+      VIRUSTOTAL_API_KEY: ${VIRUSTOTAL_API_KEY:-}
+      URLSCAN_API_KEY: ${URLSCAN_API_KEY:-}
+      GREYNOISE_API_KEY: ${GREYNOISE_API_KEY:-}
+      SHODAN_API_KEY: ${SHODAN_API_KEY:-}
+      ABUSEIPDB_API_KEY: ${ABUSEIPDB_API_KEY:-}
+      CENSYS_API_KEY: ${CENSYS_API_KEY:-}
+      CENSYS_ORG_ID: ${CENSYS_ORG_ID:-}
+      NVD_API_KEY: ${NVD_API_KEY:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      GITLAB_TOKEN: ${GITLAB_TOKEN:-}
+      MSRC_API_KEY: ${MSRC_API_KEY:-}
+      DEPS_DEV_API_KEY: ${DEPS_DEV_API_KEY:-}
+      VULNCHECK_API_KEY: ${VULNCHECK_API_KEY:-}
+      SNYK_TOKEN: ${SNYK_TOKEN:-}
+      SOCKET_TOKEN: ${SOCKET_TOKEN:-}
+      ENDOFLIFE_DATE_TOKEN: ${ENDOFLIFE_DATE_TOKEN:-}
+      HIBP_API_KEY: ${HIBP_API_KEY:-}
+      LEAKIX_API_KEY: ${LEAKIX_API_KEY:-}
+      SPYCLOUD_API_KEY: ${SPYCLOUD_API_KEY:-}
+      FLARE_API_KEY: ${FLARE_API_KEY:-}
+      DARKOWL_API_KEY: ${DARKOWL_API_KEY:-}
+      INTEL471_API_KEY: ${INTEL471_API_KEY:-}
+      KELA_API_KEY: ${KELA_API_KEY:-}
+      RECORDED_FUTURE_API_KEY: ${RECORDED_FUTURE_API_KEY:-}
+      OPENCTI_URL: ${OPENCTI_URL:-}
+      OPENCTI_TOKEN: ${OPENCTI_TOKEN:-}
+      OPENCTI_SYNC_LIMIT: ${OPENCTI_SYNC_LIMIT:-500}
+      OPENCTI_VERIFY_TLS: ${OPENCTI_VERIFY_TLS:-true}
+      DYNAMIC_DB_SYNC_HOUR: ${DYNAMIC_DB_SYNC_HOUR:-3}
+      DYNAMIC_DB_SYNC_MINUTE: ${DYNAMIC_DB_SYNC_MINUTE:-30}
+      DYNAMIC_DB_IOC_SYNC_DAYS: ${DYNAMIC_DB_IOC_SYNC_DAYS:-7}
+      RAG_ENABLED: ${RAG_ENABLED:-true}
+      RAG_EMBEDDING_ENABLED: ${RAG_EMBEDDING_ENABLED:-false}
+      RAG_RECONCILE_HOUR: ${RAG_RECONCILE_HOUR:-4}
+      RAG_RECONCILE_MINUTE: ${RAG_RECONCILE_MINUTE:-15}
+      RAG_TOMBSTONE_RETENTION_DAYS: ${RAG_TOMBSTONE_RETENTION_DAYS:-30}
+      RAG_ASSISTANCE_RETENTION_DAYS: ${RAG_ASSISTANCE_RETENTION_DAYS:-90}
+      RAG_RETENTION_BATCH_SIZE: ${RAG_RETENTION_BATCH_SIZE:-1000}
+      RAG_RETENTION_MAX_BATCHES: ${RAG_RETENTION_MAX_BATCHES:-20}
+      RAG_RETENTION_HOUR: ${RAG_RETENTION_HOUR:-4}
+      RAG_RETENTION_MINUTE: ${RAG_RETENTION_MINUTE:-45}
+      AUTH_ENABLED: ${AUTH_ENABLED:-false}
+      AUTH_DEFAULT_ROLE: ${AUTH_DEFAULT_ROLE:-viewer}
+      AUTH_SESSION_MINUTES: ${AUTH_SESSION_MINUTES:-720}
+      AUTH_BOOTSTRAP_ADMIN_USERNAME: ${AUTH_BOOTSTRAP_ADMIN_USERNAME:-admin}
+      AUTH_BOOTSTRAP_ADMIN_PASSWORD: ${AUTH_BOOTSTRAP_ADMIN_PASSWORD:-}
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_started
+      attck-data-permissions:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "from pathlib import Path; command = Path('/proc/1/cmdline').read_bytes(); assert b'celery' in command and b'beat' in command",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 256m
+          cpus: '0.5'
+
+  frontend:
+    image: ${ADVERSARYGRAPH_FRONTEND_IMAGE:-adversarygraph-frontend:local-scan}
+    pull_policy: never
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      API_UPSTREAM: api:8000
+      RATE_LIMIT_PROXY_SECRET: ${RATE_LIMIT_PROXY_SECRET:-}
+    ports:
+      - "127.0.0.1:3000:8080"
+    depends_on:
+      - api
+
+  # Reconcile the named Atlas output volume before the non-root builder starts.
+  # Existing installations may have a root-owned volume from an older image or
+  # deployment, while the builder intentionally runs as the image's `atlas`
+  # user. Resolve that UID/GID from the builder image instead of hard-coding it.
+  atlas-site-permissions:
+    image: ${ADVERSARYGRAPH_ANOMALY_DOCS_IMAGE:-adversarygraph-anomaly-docs:local-scan}
+    pull_policy: never
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        owner="$$(id -u atlas):$$(id -g atlas)"
+        mkdir -p /output
+        chown -R "$$owner" /output
+        chmod -R u+rwX,go+rX,go-w /output
+    user: "0:0"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+    volumes:
+      - type: volume
+        source: atlas_site
+        target: /output
+        volume:
+          nocopy: true
+    restart: "no"
+
+  atlas-builder:
+    image: ${ADVERSARYGRAPH_ANOMALY_DOCS_IMAGE:-adversarygraph-anomaly-docs:local-scan}
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: anomaly_detection/docs-site/Dockerfile
+    restart: unless-stopped
+    environment:
+      ATLAS_REPOSITORY: ${ATLAS_REPOSITORY:-https://github.com/anpa1200/anomaly-detection-atlas.git}
+      ATLAS_REPOSITORY_REF: ${ATLAS_REPOSITORY_REF:-819995c5681668ffd0c6a4e0f86b170b5a6bbbac}
+      ATLAS_SYNC_INTERVAL: ${ATLAS_SYNC_INTERVAL:-0}
+    volumes:
+      - type: volume
+        source: atlas_site
+        target: /output
+        volume:
+          nocopy: true
+    depends_on:
+      atlas-site-permissions:
+        condition: service_completed_successfully
+
+  atlas-docs:
+    image: ${NGINX_DOCS_IMAGE:-nginx:stable-alpine@sha256:97d490c12ba55b4946b01546d1c3ed324e8d41ab1c9fcb2a616aa470620e5b46}
+    restart: unless-stopped
+    volumes:
+      - type: volume
+        source: atlas_site
+        target: /usr/share/nginx/html
+        read_only: true
+        volume:
+          nocopy: true
+      - ./anomaly_detection/docker/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:3001:80"
+    depends_on:
+      - atlas-builder
+
+volumes:
+  pg_socket:
+  attck_data:
+  atlas_site:
+  malwaregraph_storage:
+  adversarygraph_logs:
+
+networks:
+  malwaregraph_internal:
+    internal: true

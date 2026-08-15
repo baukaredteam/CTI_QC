@@ -1,0 +1,4164 @@
+import axios from 'axios';
+import type {
+  AttackVersion,
+  CampaignDetail,
+  CampaignListItem,
+  CampaignResult,
+  CompareResult,
+  GroupDetail,
+  GroupListItem,
+  OverlapExplanationRequest,
+  ReportSession,
+  Tactic,
+  TechniqueDetail,
+  TechniqueListItem,
+} from '@/types/attack';
+
+const http = axios.create({
+  baseURL: '/api',
+  headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,
+});
+
+http.interceptors.response.use(
+  response => response,
+  error => {
+    const detail = error.response?.data?.detail;
+    const message = Array.isArray(detail)
+      ? detail.map((item: { msg?: string }) => item.msg).filter(Boolean).join('; ')
+      : detail || error.response?.data?.message || error.message || 'Unknown API error';
+    const url = error.config?.url || '';
+    const silentOn500 = ['/report', '/workflow-graph', '/logs'];
+    const isSilent500 = error.response?.status === 500 && silentOn500.some(p => url.endsWith(p));
+    const skipGlobalError = Boolean((error.config as { skipGlobalError?: boolean } | undefined)?.skipGlobalError);
+    if (typeof window !== 'undefined' && !skipGlobalError && !url.includes('/system/selftest') && !isSilent500) {
+      window.dispatchEvent(new CustomEvent('adversarygraph:api-error', {
+        detail: {
+          message,
+          status: error.response?.status,
+          url,
+          retry: () => http.request(error.config),
+        },
+      }));
+    }
+    return Promise.reject(new Error(message));
+  },
+);
+
+// ── ATT&CK ───────────────────────────────────────────────────────────────────
+
+export interface CurrentUser {
+  name: string;
+  roles: string[];
+  permissions?: string[];
+  modules?: string[];
+  groups?: string[];
+  auth_enabled: boolean;
+  user_id?: string;
+  auth_source?: string;
+}
+
+export interface AuthStatus {
+  auth_enabled: boolean;
+  native_login_enabled: boolean;
+  user_count: number;
+  bootstrap_configured: boolean;
+  bootstrap_required: boolean;
+  sso_mode?: string;
+  trusted_proxy_sso_enabled?: boolean;
+  roles?: string[];
+  permissions?: string[];
+  role_permissions?: Record<string, string[]>;
+  module_catalog?: ModuleCatalogItem[];
+  password_policy?: {
+    min_length: number;
+    require_upper: boolean;
+    require_lower: boolean;
+    require_number: boolean;
+    require_special: boolean;
+    mfa_available: boolean;
+    mfa_required: boolean;
+  };
+}
+
+export interface ManagedUser {
+  id: string;
+  username: string;
+  display_name: string;
+  role: string;
+  permissions: string[];
+  effective_permissions: string[];
+  effective_modules: string[];
+  group_ids: string[];
+  groups: Array<Pick<AccessGroup, 'id' | 'slug' | 'name' | 'enabled'>>;
+  auth_provider: string;
+  external_subject: string;
+  mfa_enabled: boolean;
+  enabled: boolean;
+  last_login_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ModuleCatalogItem {
+  key: string;
+  label: string;
+  route: string;
+  category: string;
+}
+
+export interface AccessGroup {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  permissions: string[];
+  modules: string[];
+  system: boolean;
+  enabled: boolean;
+  member_count: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ManagedSession {
+  id: string;
+  user_id: string;
+  username: string;
+  auth_provider: string;
+  ip_address: string;
+  user_agent: string;
+  expires_at: string;
+  revoked_at: string | null;
+  created_at: string;
+  active: boolean;
+}
+
+export interface AuthAuditEvent {
+  id: string;
+  actor: string;
+  action: string;
+  object_type: string;
+  object_id: string;
+  details: Record<string, unknown>;
+  created_at: string;
+}
+
+export const authApi = {
+  status: (): Promise<AuthStatus> => http.get('/auth/status', { skipGlobalError: true } as any).then(r => r.data),
+  me: (): Promise<CurrentUser> => http.get('/auth/me', { skipGlobalError: true } as any).then(r => r.data),
+  login: (body: { username: string; password: string; mfa_code?: string }): Promise<{ token: string; user: ManagedUser; expires_at: string }> =>
+    http.post('/auth/login', body, { skipGlobalError: true } as any).then(r => r.data),
+  logout: (): Promise<{ status: string }> => http.post('/auth/logout').then(r => r.data),
+  users: (): Promise<ManagedUser[]> => http.get('/auth/users').then(r => r.data),
+  groups: (): Promise<AccessGroup[]> => http.get('/auth/groups').then(r => r.data),
+  createGroup: (body: { slug: string; name: string; description?: string; permissions?: string[]; modules?: string[]; enabled?: boolean }): Promise<AccessGroup> =>
+    http.post('/auth/groups', body).then(r => r.data),
+  updateGroup: (id: string, body: { name?: string; description?: string; permissions?: string[]; modules?: string[]; enabled?: boolean }): Promise<AccessGroup> =>
+    http.patch(`/auth/groups/${id}`, body).then(r => r.data),
+  deleteGroup: (id: string): Promise<void> => http.delete(`/auth/groups/${id}`).then(() => {}),
+  createUser: (body: { username: string; password: string; display_name?: string; role: string; permissions?: string[]; group_ids?: string[]; enabled: boolean }): Promise<ManagedUser> =>
+    http.post('/auth/users', body).then(r => r.data),
+  updateUser: (id: string, body: { display_name?: string; role?: string; permissions?: string[]; group_ids?: string[]; enabled?: boolean }): Promise<ManagedUser> =>
+    http.patch(`/auth/users/${id}`, body).then(r => r.data),
+  setPassword: (id: string, password: string): Promise<{ status: string }> =>
+    http.post(`/auth/users/${id}/password`, { password }).then(r => r.data),
+  disableUser: (id: string): Promise<void> => http.delete(`/auth/users/${id}`).then(() => {}),
+  sessions: (): Promise<ManagedSession[]> => http.get('/auth/sessions').then(r => r.data),
+  revokeUserSessions: (id: string): Promise<{ status: string; revoked: number }> =>
+    http.post(`/auth/users/${id}/sessions/revoke`).then(r => r.data),
+  revokeOwnSessions: (): Promise<{ status: string; revoked: number }> =>
+    http.post('/auth/sessions/revoke-all').then(r => r.data),
+  disableMfa: (id: string): Promise<{ status: string; mfa_enabled: boolean }> =>
+    http.post(`/auth/users/${id}/mfa/disable`).then(r => r.data),
+  audit: (): Promise<AuthAuditEvent[]> => http.get('/auth/audit').then(r => r.data),
+};
+
+export interface ObservabilityTrace {
+  request_id: string;
+  method: string;
+  path: string;
+  status_code: number;
+  duration_ms: number;
+  timestamp: string;
+  client: string;
+  error?: string;
+}
+
+export interface ObservabilitySummary {
+  started_at: string;
+  uptime_seconds: number;
+  requests_total: number;
+  requests_by_status: Record<string, number>;
+  top_routes: Array<{ route: string; count: number }>;
+  latency: { avg_ms: number; max_ms: number };
+  last_error: ObservabilityTrace | null;
+  recent_traces: ObservabilityTrace[];
+  log_file: { path: string; exists: boolean; size_bytes: number };
+}
+
+export const observabilityApi = {
+  summary: (): Promise<ObservabilitySummary> =>
+    http.get('/observability/summary').then(r => r.data),
+  traces: (limit = 100): Promise<{ items: ObservabilityTrace[]; limit: number }> =>
+    http.get('/observability/traces', { params: { limit } }).then(r => r.data),
+  logs: (limit = 200): Promise<{ path: string; exists: boolean; limit: number; lines: string[] }> =>
+    http.get('/observability/logs', { params: { limit } }).then(r => r.data),
+  metrics: (): Promise<string> =>
+    http.get('/observability/metrics', { responseType: 'text' }).then(r => r.data),
+};
+
+export interface StatPoint {
+  label: string;
+  value: number;
+  id: string;
+  secondary: string;
+  category: string;
+  detail: string;
+}
+
+export interface StatWidget {
+  id: string;
+  title: string;
+  description: string;
+  dataset: string;
+  kind: 'bar' | 'pie' | 'table' | 'score';
+  points: StatPoint[];
+}
+
+export interface StatisticsOverview {
+  generated_at: string;
+  domain: string;
+  included: string[];
+  totals: StatPoint[];
+  widgets: StatWidget[];
+}
+
+export const statisticsApi = {
+  overview: (params: { domain: string; include: string[]; limit?: number }): Promise<StatisticsOverview> => {
+    const query = new URLSearchParams();
+    query.set('domain', params.domain);
+    query.set('limit', String(params.limit ?? 15));
+    params.include.forEach(item => query.append('include', item));
+    return http.get(`/statistics/overview?${query.toString()}`).then(r => r.data);
+  },
+};
+
+export const attackApi = {
+  versions: (): Promise<AttackVersion[]> =>
+    http.get('/attack/versions').then(r => r.data),
+
+  tactics: (domain: string, version?: string): Promise<Tactic[]> =>
+    http.get('/attack/tactics', { params: { domain, ...(version && { version }) } }).then(r => r.data),
+
+  techniques: (params: {
+    domain: string; version?: string; tactic?: string;
+    platform?: string; subtechniques?: boolean; search?: string;
+  }): Promise<TechniqueListItem[]> =>
+    http.get('/attack/techniques', { params }).then(r => r.data),
+
+  technique: (id: string, domain: string, version?: string): Promise<TechniqueDetail> =>
+    http.get(`/attack/techniques/${id}`, { params: { domain, ...(version && { version }) } }).then(r => r.data),
+};
+
+// ── ATT&CK Group Profiles ────────────────────────────────────────────────────
+
+export const aptApi = {
+  groups: (params: { domain: string; version?: string; search?: string }): Promise<GroupListItem[]> =>
+    http.get('/apt/groups', { params }).then(r => r.data),
+
+  group: (id: string, domain: string, version?: string): Promise<GroupDetail> =>
+    http.get(`/apt/groups/${id}`, { params: { domain, ...(version && { version }) } }).then(r => r.data),
+
+  // Body uses CompareRequest wrapper {technique_ids: [...]}
+  compare: (params: { technique_ids: string[]; domain: string; version?: string; top_n?: number }): Promise<CompareResult[]> =>
+    http.post('/apt/compare', { technique_ids: params.technique_ids }, {
+      params: { domain: params.domain, version: params.version, top_n: params.top_n },
+    }).then(r => r.data),
+
+  // ── DB 1: Campaigns ──────────────────────────────────────────────────────
+
+  campaigns: (params: {
+    domain: string; version?: string; group_id?: string; search?: string;
+  }): Promise<CampaignListItem[]> =>
+    http.get('/apt/campaigns', { params }).then(r => r.data),
+
+  campaign: (id: string, domain: string, version?: string): Promise<CampaignDetail> =>
+    http.get(`/apt/campaigns/${id}`, { params: { domain, ...(version && { version }) } }).then(r => r.data),
+
+  compareCampaigns: (params: {
+    technique_ids: string[]; domain: string; version?: string; top_n?: number;
+  }): Promise<CampaignResult[]> =>
+    http.post('/apt/campaigns/compare', { technique_ids: params.technique_ids }, {
+      params: { domain: params.domain, version: params.version, top_n: params.top_n },
+    }).then(r => r.data),
+
+  explainOverlap: (payload: OverlapExplanationRequest, params: { domain: string; version?: string }): Promise<{ markdown: string }> =>
+    http.post('/apt/overlap/explain', payload, {
+      params: { domain: params.domain, version: params.version },
+    }).then(r => r.data),
+};
+
+// ── DB 2: Report sessions ─────────────────────────────────────────────────────
+
+export const reportsApi = {
+  list: (limit = 50, offset = 0): Promise<ReportSession[]> =>
+    http.get('/analyze/sessions', { params: { limit, offset } }).then(r => r.data),
+
+  compare: (sessionId: string, topN = 10): Promise<CompareResult[]> =>
+    http.post(`/analyze/sessions/${sessionId}/compare`, null, {
+      params: { top_n: topN },
+    }).then(r => r.data),
+
+  remove: (sessionId: string): Promise<void> =>
+    http.delete(`/analyze/sessions/${sessionId}`).then(() => {}),
+};
+
+// ── IOC Intelligence ─────────────────────────────────────────────────────────
+
+export interface IOCSourceStatus {
+  source_id: string;
+  label: string;
+  kind: string;
+  url: string;
+  enabled: boolean;
+  last_synced_at: string | null;
+  sync_status: string;
+  sync_error: string;
+}
+
+export interface IOCItem {
+  id: number;
+  value: string;
+  type: string;
+  source: string;
+  source_url: string;
+  first_seen: string | null;
+  last_seen: string | null;
+  confidence: number;
+  tlp: string;
+  malware_family: string;
+  campaign: string;
+  technique_ids: string[];
+  tags: string[];
+  description: string;
+  relationship: string;
+  evidence: string;
+}
+
+export interface IOCActorRef {
+  actor_attack_id: string;
+  actor_name: string;
+  relationship: string;
+  confidence: number;
+  evidence: string;
+  source: string;
+}
+
+export interface IOCLibraryItem {
+  id: number;
+  value: string;
+  type: string;
+  source: string;
+  source_url: string;
+  first_seen: string | null;
+  last_seen: string | null;
+  confidence: number;
+  tlp: string;
+  malware_family: string;
+  campaign: string;
+  technique_ids: string[];
+  tags: string[];
+  description: string;
+  actors: IOCActorRef[];
+  actor_count: number;
+}
+
+export interface IOCLibraryResult {
+  total: number;
+  limit: number;
+  offset: number;
+  items: IOCLibraryItem[];
+}
+
+export interface IOCDetail extends IOCLibraryItem {
+  created_at: string;
+  updated_at: string;
+  source_details: {
+    source_id: string;
+    label: string;
+    kind: string;
+    url: string;
+    enabled: boolean;
+    last_synced_at: string | null;
+    sync_status: string;
+    sync_error: string;
+  };
+  techniques: Array<{
+    attack_id: string;
+    name: string;
+    tactics: string[];
+    url: string;
+    evidence: Array<{ attack_id?: string; priority?: string; source?: string; evidence?: string }>;
+  }>;
+  enrichments: Array<{
+    source: string;
+    label: string;
+    kind: string;
+    url: string;
+    status: string;
+    values: Array<{ key: string; value: string }>;
+  }>;
+  raw: Record<string, unknown>;
+}
+
+export interface IOCSummary {
+  actor_attack_id: string;
+  count: number;
+  by_type: Record<string, number>;
+  sources: Record<string, number>;
+  techniques: Record<string, number>;
+}
+
+// ── CVE Library ──────────────────────────────────────────────────────────────
+
+export interface CVESourceStatus {
+  source_id: string;
+  label: string;
+  kind: string;
+  url: string;
+  enabled: boolean;
+  last_synced_at: string | null;
+  sync_status: string;
+  sync_error: string;
+}
+
+export interface CVEItem {
+  id: number | null;
+  cve_id: string;
+  source: string;
+  description: string;
+  published: string | null;
+  last_modified: string | null;
+  vuln_status: string;
+  cvss: { version: string; score: string; severity: string; vector: string };
+  cwe_ids: string[];
+  cpe_matches: string[];
+  references: Array<{ url?: string; source?: string; tags?: string[] }>;
+  tags: string[];
+  known_exploited: boolean;
+  kev_due_date: string;
+  kev_required_action: string;
+}
+
+export interface CVEDetail extends CVEItem {
+  techniques: Array<{ attack_id: string; name: string; relationship: string; confidence: number; evidence: string; source: string }>;
+  iocs: Array<{ indicator_id: number; value: string; type: string; relationship: string; confidence: number; evidence: string; source: string }>;
+  actors: Array<{ actor_attack_id: string; actor_name: string; relationship: string; confidence: number; evidence: string; source: string }>;
+  raw: Record<string, unknown>;
+}
+
+export interface CVECorrelation {
+  cve: CVEItem;
+  relationship: string;
+  confidence: number;
+  evidence: string;
+  source: string;
+  path: Array<Record<string, unknown>>;
+}
+
+export interface CVECorrelationGraph {
+  cve_id: string;
+  nodes: Array<Record<string, unknown>>;
+  edges: Array<Record<string, unknown>>;
+}
+
+export interface CVELibraryResult {
+  total: number;
+  limit: number;
+  offset: number;
+  items: CVEItem[];
+}
+
+export const cveApi = {
+  sources: (): Promise<CVESourceStatus[]> =>
+    http.get('/cve/sources').then(r => r.data),
+  library: (params: { search?: string; severity?: string; known_exploited?: boolean | null; limit?: number; offset?: number }): Promise<CVELibraryResult> =>
+    http.get('/cve/library', { params }).then(r => r.data),
+  detail: (cveId: string): Promise<CVEDetail> =>
+    http.get(`/cve/${encodeURIComponent(cveId)}`).then(r => r.data),
+  graph: (cveId: string): Promise<CVECorrelationGraph> =>
+    http.get(`/cve/${encodeURIComponent(cveId)}/graph`).then(r => r.data),
+  relatedToTechnique: (attackId: string, limit = 100): Promise<CVECorrelation[]> =>
+    http.get(`/cve/related/technique/${encodeURIComponent(attackId)}`, { params: { limit } }).then(r => r.data),
+  relatedToActor: (actorAttackId: string, limit = 100): Promise<CVECorrelation[]> =>
+    http.get(`/cve/related/actor/${encodeURIComponent(actorAttackId)}`, { params: { limit } }).then(r => r.data),
+  relatedToIoc: (indicatorId: number | string, limit = 100): Promise<CVECorrelation[]> =>
+    http.get(`/cve/related/ioc/${encodeURIComponent(String(indicatorId))}`, { params: { limit } }).then(r => r.data),
+  syncAll: (days = 7): Promise<{ totals: { inserted: number; updated: number }; sources: Array<Record<string, unknown>>; correlations: Record<string, number> }> =>
+    http.post('/cve/sync/all', null, { params: { days } }).then(r => r.data),
+  syncNvd: (days = 7, limit = 2000): Promise<Record<string, unknown>> =>
+    http.post('/cve/sync/nvd', null, { params: { days, limit } }).then(r => r.data),
+  syncNvdCveIds: (cveIds: string[], limit = 100): Promise<Record<string, unknown>> =>
+    http.post('/cve/sync/nvd/cve-ids', { cve_ids: cveIds }, { params: { limit } }).then(r => r.data),
+  enrichMissingCvss: (limit = 100): Promise<Record<string, unknown>> =>
+    http.post('/cve/sync/nvd/missing-cvss', null, { params: { limit } }).then(r => r.data),
+  syncKev: (): Promise<Record<string, unknown>> =>
+    http.post('/cve/sync/kev').then(r => r.data),
+  syncGithubAdvisories: (params?: { ecosystem?: string; severity?: string; limit?: number }): Promise<Record<string, unknown>> =>
+    http.post('/cve/sync/github-advisories', null, { params }).then(r => r.data),
+  syncEpss: (limit = 500): Promise<Record<string, unknown>> =>
+    http.post('/cve/sync/epss', null, { params: { limit } }).then(r => r.data),
+  syncOsvPackages: (packages: Array<{ package_name?: string; name?: string; ecosystem?: string; package_type?: string; package_version?: string; version?: string }>): Promise<Record<string, unknown>> =>
+    http.post('/cve/sync/osv/packages', { packages }).then(r => r.data),
+  correlate: (): Promise<Record<string, number>> =>
+    http.post('/cve/correlate').then(r => r.data),
+};
+
+export interface OpenCTIStatus {
+  configured: boolean;
+  reachable: boolean;
+  version: string;
+  url: string;
+  user?: string;
+}
+
+export interface OpenCTISyncResult {
+  source: string;
+  direction: string;
+  indicators_seen?: number | null;
+  observables_seen?: number | null;
+  reports_seen?: number | null;
+  reports_imported?: number | null;
+  inserted?: number | null;
+  updated?: number | null;
+  actor_links?: number | null;
+  ttp_enriched?: number | null;
+  seen?: number | null;
+  pushed_indicators?: number | null;
+  skipped?: number | null;
+  pushed_reports?: number | null;
+  errors: string[];
+  pull?: Record<string, unknown> | null;
+  push?: Record<string, unknown> | null;
+}
+
+type IOCSyncOptions = {
+  ai_enrich?: boolean;
+  ai_provider?: 'local' | 'claude' | 'openai' | 'gemini' | 'minimax';
+};
+
+export interface VirusTotalLookupResult {
+  indicator: string;
+  type: string;
+  virustotal_url: string;
+  permalink: string;
+  summary: string;
+  reputation: number;
+  total_votes: Record<string, number>;
+  last_analysis_stats: Record<string, number>;
+  last_analysis_date: number | null;
+  first_submission_date: number | null;
+  last_submission_date: number | null;
+  last_modification_date: number | null;
+  names: string[];
+  tags: string[];
+  threat_names: string[];
+  detections: Array<{ engine: string; category: string; result: string }>;
+  ttps: Array<{ attack_id: string; name: string; tactics: string[]; url: string }>;
+  ttp_evidence: Array<{ attack_id: string; name: string; tactic: string; source: string; evidence: string }>;
+  actors: Array<{
+    attack_id: string;
+    name: string;
+    aliases: string[];
+    matched_terms: string[];
+    evidence: Array<{ term: string; source: string; evidence: string }>;
+    technique_ids: string[];
+    url: string;
+  }>;
+  rules: Array<{ type: string; name: string; source: string; severity: string; description: string }>;
+  sandbox_verdicts: Array<{ sandbox: string; category: string; malware_classification: string; malware_names: string; confidence: string }>;
+  dns_records: Array<{ type: string; value: string; ttl: string }>;
+  resolutions: Array<{ host_name: string; ip_address: string; date: string }>;
+  whois: string;
+  network: Record<string, unknown>;
+  context: Record<string, unknown>;
+}
+
+export interface IOCInvestigationResult {
+  session_id?: string | null;
+  artifact: string;
+  artifact_type: string;
+  depth: number;
+  suspicion_score: number;
+  verdict: string;
+  summary: string;
+  kill_chain: Array<{ phase: string; techniques: number }>;
+  techniques: Array<{ attack_id: string; name: string; tactics: string[]; url: string; evidence_sources?: string[] }>;
+  actors: Array<{ attack_id: string; name: string; source: string; confidence: number; evidence: string }>;
+  sources: Array<{
+    source: string;
+    status: string;
+    summary: string;
+    error?: string;
+    relationships: Array<{ source: string; target: string; target_type: string; evidence_source: string; tier: number; evidence: string }>;
+    technique_ids: string[];
+    actors: unknown[];
+    raw: Record<string, unknown>;
+  }>;
+  tier2_sources: Array<Record<string, unknown>>;
+  tier3_sources?: Array<Record<string, unknown>>;
+  relationships: {
+    nodes: Array<{ id: string; kind: string; type: string; value: string; tier: number; sources: string[]; suspicious: number }>;
+    edges: Array<{ source: string; target: string; type: string; tier: number; evidence_source: string; evidence: string }>;
+  };
+  ai_input: Record<string, unknown>;
+  ai_error?: string;
+}
+
+export interface IOCInvestigationHistoryItem {
+  session_id: string;
+  artifact: string;
+  artifact_type: string;
+  verdict: string;
+  suspicion_score: number;
+  depth: number;
+  ai_summarize: boolean;
+  ai_provider: string;
+  created_at: string;
+  technique_count: number;
+  actor_count: number;
+}
+
+type IOCLibraryParams = {
+  search?: string;
+  type?: string;
+  source?: string;
+  actor?: string | string[];
+  sort?: string;
+  limit?: number;
+  offset?: number;
+};
+
+function iocLibraryQuery(params: IOCLibraryParams) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === '') return;
+    if (Array.isArray(value)) {
+      value.filter(Boolean).forEach(item => query.append(key, item));
+    } else {
+      query.set(key, String(value));
+    }
+  });
+  return query;
+}
+
+export const iocApi = {
+  sources: (): Promise<IOCSourceStatus[]> => http.get('/ioc/sources').then(r => r.data),
+  library: (params: IOCLibraryParams): Promise<IOCLibraryResult> =>
+    http.get(`/ioc/library?${iocLibraryQuery(params).toString()}`).then(r => r.data),
+  detail: (id: number | string, domain: string): Promise<IOCDetail> =>
+    http.get(`/ioc/library/${id}/detail`, { params: { domain } }).then(r => r.data),
+  createSource: (payload: {label: string; url: string; kind: 'custom-json' | 'custom-csv' | 'custom-txt'; source_id?: string}): Promise<IOCSourceStatus> =>
+    http.post('/ioc/sources', payload).then(r => r.data),
+  updateSource: (sourceId: string, payload: {label: string; url: string; kind: 'custom-json' | 'custom-csv' | 'custom-txt'}): Promise<IOCSourceStatus> =>
+    http.patch(`/ioc/sources/${sourceId}`, payload).then(r => r.data),
+  deleteSource: (sourceId: string): Promise<void> =>
+    http.delete(`/ioc/sources/${sourceId}`).then(() => {}),
+  syncThreatFox: (days = 7, options?: IOCSyncOptions): Promise<{source: string; days: number; inserted: number; updated: number; actor_links: number; ttp_enriched: number}> =>
+    http.post('/ioc/sync/threatfox', null, { params: { days, ...options } }).then(r => r.data),
+  syncMalpedia: (): Promise<{
+    source: string;
+    days: null;
+    inserted: number;
+    updated: number;
+    actor_links: number;
+    families: number;
+    attributed_families: number;
+  }> =>
+    http.post('/ioc/sync/malpedia').then(r => r.data),
+  syncSource: (sourceId: string, options?: IOCSyncOptions): Promise<{source: string; days: null; inserted: number; updated: number; actor_links: number; ttp_enriched: number}> =>
+    http.post(`/ioc/sync/${sourceId}`, null, { params: options }).then(r => r.data),
+  syncOtx: (mode: 'subscribed' | 'actor-search' = 'subscribed', options?: IOCSyncOptions): Promise<{
+    source: string;
+    inserted: number;
+    updated: number;
+    actor_links: number;
+    ttp_enriched?: number;
+  }> =>
+    http.post('/ioc/sync/otx', null, { params: { mode, ...options } }).then(r => r.data),
+  enrichIocTtps: (options?: IOCSyncOptions & { source_id?: string[]; limit?: number }): Promise<{
+    checked: number;
+    updated: number;
+    normalized_types: number;
+    ai_attempted: number;
+    ai_mapped: number;
+    priority: string;
+  }> => {
+    const params = new URLSearchParams();
+    if (options?.ai_enrich !== undefined) params.set('ai_enrich', String(options.ai_enrich));
+    if (options?.ai_provider) params.set('ai_provider', options.ai_provider);
+    if (options?.limit) params.set('limit', String(options.limit));
+    (options?.source_id ?? []).forEach(sourceId => params.append('source_id', sourceId));
+    return http.post(`/ioc/enrich/ttps?${params.toString()}`).then(r => r.data);
+  },
+  importStix: (bundle: Record<string, unknown>, params?: { source_label?: string; source_url?: string }): Promise<{
+    source: string;
+    inserted: number;
+    updated: number;
+    actor_links: number;
+    items_seen: number;
+  }> =>
+    http.post('/ioc/import/stix', bundle, { params }).then(r => r.data),
+  importTaxii: (payload: {
+    objects_url: string;
+    token?: string;
+    username?: string;
+    password?: string;
+    source_label?: string;
+  }): Promise<{
+    source: string;
+    inserted: number;
+    updated: number;
+    actor_links: number;
+    items_seen: number;
+  }> =>
+    http.post('/ioc/import/taxii', payload).then(r => r.data),
+  openctiStatus: (): Promise<OpenCTIStatus> =>
+    http.get('/ioc/opencti/status').then(r => r.data),
+  openctiPull: (params?: { limit?: number; domain?: string }): Promise<OpenCTISyncResult> =>
+    http.post('/ioc/opencti/pull', null, { params: { limit: params?.limit ?? 500, domain: params?.domain ?? 'enterprise-attack' } }).then(r => r.data),
+  openctiPush: (params?: { limit?: number; source_id?: string; include_reports?: boolean }): Promise<OpenCTISyncResult> =>
+    http.post('/ioc/opencti/push', null, { params: { limit: params?.limit ?? 500, source_id: params?.source_id ?? '', include_reports: params?.include_reports ?? true } }).then(r => r.data),
+  openctiSync: (params?: { limit?: number; domain?: string; include_reports?: boolean }): Promise<OpenCTISyncResult> =>
+    http.post('/ioc/opencti/sync', null, { params: { limit: params?.limit ?? 500, domain: params?.domain ?? 'enterprise-attack', include_reports: params?.include_reports ?? true } }).then(r => r.data),
+  stixExportUrl: (params: IOCLibraryParams) => `/api/ioc/library/export/stix?${iocLibraryQuery(params).toString()}`,
+  actor: (actorId: string, params?: {days?: number; active_only?: boolean; limit?: number}): Promise<IOCItem[]> =>
+    http.get(`/ioc/actors/${actorId}`, { params: { days: params?.days ?? 180, active_only: params?.active_only ?? true, limit: params?.limit ?? 250 } }).then(r => r.data),
+  actorSummary: (actorId: string, days = 180): Promise<IOCSummary> =>
+    http.get(`/ioc/actors/${actorId}/summary`, { params: { days } }).then(r => r.data),
+  actorCounts: (actorIds: string[], days = 180, activeOnly = true): Promise<Record<string, number>> => {
+    const query = new URLSearchParams();
+    actorIds.forEach(id => query.append('actor_ids', id));
+    query.set('days', String(days));
+    query.set('active_only', String(activeOnly));
+    return http.get(`/ioc/actors/counts?${query.toString()}`).then(r => r.data.counts);
+  },
+  enrichActorOtx: (actorId: string): Promise<{
+    source: string;
+    actor_attack_id: string;
+    actor_name: string;
+    inserted: number;
+    updated: number;
+    actor_links: number;
+    searched_aliases: number;
+    pulses: number;
+    matched_pulses: number;
+  }> =>
+    http.post(`/ioc/actors/${actorId}/enrich/otx`).then(r => r.data),
+  uploadReport: (formData: FormData): Promise<{
+    filename: string;
+    extracted: number;
+    imported: {source: string; days: null; inserted: number; updated: number; actor_links: number};
+    preview: IOCItem[];
+  }> =>
+    http.post('/ioc/report', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data),
+  actorCsvUrl: (actorId: string, days = 180, activeOnly = true) =>
+    `/api/ioc/actors/${actorId}/export.csv?days=${days}&active_only=${activeOnly}`,
+  virusTotalLookup: (payload: { indicator: string; domain: string }): Promise<VirusTotalLookupResult> =>
+    http.post('/ioc/virustotal/lookup', payload).then(r => r.data),
+  investigate: (payload: {
+    artifact: string;
+    domain: string;
+    depth?: number;
+    max_tier_nodes?: number;
+    ai_summarize?: boolean;
+    ai_provider?: 'local' | 'claude' | 'openai' | 'gemini' | 'minimax';
+  }): Promise<IOCInvestigationResult> =>
+    http.post('/ioc/investigate', payload).then(r => r.data),
+  investigations: (limit = 50, offset = 0): Promise<IOCInvestigationHistoryItem[]> =>
+    http.get('/ioc/investigations', { params: { limit, offset } }).then(r => r.data),
+  investigation: (sessionId: string): Promise<IOCInvestigationResult> =>
+    http.get(`/ioc/investigations/${sessionId}`).then(r => r.data),
+  deleteInvestigation: (sessionId: string): Promise<void> =>
+    http.delete(`/ioc/investigations/${sessionId}`).then(() => {}),
+};
+
+// ── Analysis ──────────────────────────────────────────────────────────────────
+
+export interface AnalysisResult {
+  session_id: string;
+  provider: string;
+  model: string;
+  summary: string;
+  techniques: Array<{
+    attack_id: string;
+    name: string;
+    tactic: string;
+    confidence: number;
+    evidence: string;
+    review_status?: 'suggested' | 'accepted' | 'rejected' | 'needs-evidence';
+    evidence_start?: number | null;
+    evidence_end?: number | null;
+    evidence_source?: string;
+  }>;
+  apt_matches: Array<{ group_attack_id: string; group_name: string; similarity: number; shared_count: number; shared_techniques: string[] }>;
+  apt_hints: string[];
+  raw_response?: string;
+}
+
+export interface LogPcapAnalysisResult {
+  provider: string;
+  model: string;
+  filename: string | null;
+  summary: string;
+  report: string;
+  observables: Array<{ value: string; type: string; confidence: number; description: string }>;
+  suspicious_findings: Array<{ severity: string; category: string; evidence: string; reason: string }>;
+  techniques: AnalysisResult['techniques'];
+  apt_matches: AnalysisResult['apt_matches'];
+}
+
+export interface LinkedReportEntity {
+  type: 'technique' | 'ioc' | 'cve' | 'group' | string;
+  id: string;
+  label: string;
+  value: string;
+  route: string;
+  aliases: string[];
+  metadata: Record<string, unknown>;
+}
+
+export type ReportTlp = 'TLP:CLEAR' | 'TLP:GREEN' | 'TLP:AMBER' | 'TLP:AMBER+STRICT' | 'TLP:RED';
+
+export interface LinkedAnalysisReport {
+  session_id: string;
+  name: string | null;
+  provider: string;
+  model: string;
+  domain: string;
+  tlp: ReportTlp;
+  created_at: string;
+  source_text: string;
+  source_text_available: boolean;
+  source_note: string;
+  summary: string;
+  techniques: AnalysisResult['techniques'];
+  apt_matches: AnalysisResult['apt_matches'];
+  entities: LinkedReportEntity[];
+  report_images: Array<{ url: string; alt: string; caption: string; source: string }>;
+  report_intake: Record<string, unknown> | null;
+}
+
+export interface ReportCollectionTag {
+  type: string;
+  label: string;
+  value: string;
+  route: string;
+  confidence: number;
+  metadata: Record<string, unknown>;
+}
+
+export interface ReportCollectionItem {
+  session_id: string;
+  title: string;
+  source_url: string;
+  publisher: string;
+  status: string;
+  provider: string;
+  model: string;
+  domain: string;
+  tlp: ReportTlp;
+  created_at: string;
+  updated_at: string;
+  summary: string;
+  source_text_available: boolean;
+  counts: Record<string, number>;
+  tags: Record<string, ReportCollectionTag[]>;
+}
+
+export interface ReportCollectionResult {
+  total: number;
+  limit: number;
+  offset: number;
+  items: ReportCollectionItem[];
+}
+
+export interface StoredResearchResult {
+  session_id: string;
+  status: string;
+  title: string;
+  filename: string | null;
+  source_url: string;
+  source_text_available: boolean;
+  summary: string;
+  tlp: ReportTlp;
+}
+
+export interface ReportEditPayload {
+  name?: string;
+  source_text?: string;
+  source_url?: string;
+  publisher?: string;
+  summary?: string;
+  tlp?: ReportTlp;
+}
+
+export const analyzeApi = {
+  /** Non-streaming: returns full result */
+  submit: (formData: FormData): Promise<AnalysisResult> =>
+    http.post('/analyze', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data),
+
+  /** Streaming: returns a native EventSource-compatible fetch stream */
+  stream: (formData: FormData, signal?: AbortSignal): Promise<Response> =>
+    fetch('/api/analyze/stream', { method: 'POST', body: formData, signal }),
+
+  /** Single-turn chat with SSE streaming */
+  chat: (payload: { message: string; provider: string; model?: string; context?: string; system_prompt?: string }, signal?: AbortSignal): Promise<Response> =>
+    fetch('/api/analyze/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal,
+    }),
+
+  getResult: (sessionId: string): Promise<AnalysisResult> =>
+    http.get(`/analyze/${sessionId}`).then(r => r.data),
+
+  linkedReport: (sessionId: string): Promise<LinkedAnalysisReport> =>
+    http.get(`/analyze/sessions/${sessionId}/linked-report`).then(r => r.data),
+
+  editLinkedReport: (sessionId: string, payload: ReportEditPayload): Promise<LinkedAnalysisReport> =>
+    http.patch(`/analyze/sessions/${sessionId}/linked-report`, payload).then(r => r.data),
+
+  reparseLinkedReport: (sessionId: string, payload: { provider: string; model?: string }): Promise<AnalysisResult> =>
+    http.post(`/analyze/sessions/${sessionId}/reparse`, payload).then(r => r.data),
+
+  reportCollection: (limit = 100, offset = 0): Promise<ReportCollectionResult> =>
+    http.get('/analyze/sessions/collection', { params: { limit, offset } }).then(r => r.data),
+
+  storeResearch: (formData: FormData): Promise<StoredResearchResult> =>
+    http.post('/analyze/sessions/research', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data),
+
+  ingestResearchUrl: (formData: FormData): Promise<StoredResearchResult> =>
+    http.post('/analyze/sessions/research-url', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data),
+
+  logPcap: (formData: FormData): Promise<LogPcapAnalysisResult> =>
+    http.post('/analyze/log-pcap', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data),
+
+  updateTechniqueReview: (
+    sessionId: string,
+    attackId: string,
+    body: {
+      review_status: 'suggested' | 'accepted' | 'rejected' | 'needs-evidence';
+      evidence?: string;
+      review_note?: string;
+      reviewer?: string;
+    },
+  ): Promise<AnalysisResult['techniques'][number]> =>
+    http.patch(`/analyze/sessions/${sessionId}/techniques/${attackId}/review`, body).then(r => r.data),
+};
+
+// ── Asset Attack Surface ─────────────────────────────────────────────────────
+
+export interface AssetSurfaceTtpCandidate {
+  attack_id: string;
+  name: string;
+  reason: string;
+}
+
+export interface AssetSurfaceAsset {
+  asset_id: string;
+  asset: string;
+  asset_type: string;
+  environment: string;
+  owner: string;
+  exposure: string;
+  criticality: string;
+  ip_addresses: string[];
+  domains: string[];
+  ports: number[];
+  technologies: string[];
+  products: string[];
+  suppliers: string[];
+  dependencies: string[];
+  risk_score: number;
+  risk_level: 'critical' | 'high' | 'medium' | 'low';
+  ai_risk_level?: string;
+  attack_surface: string[];
+  likely_entry_points: string[];
+  attack_paths?: string[];
+  ttp_candidates: AssetSurfaceTtpCandidate[];
+  control_gaps?: string[];
+  validation_steps?: string[];
+  detection_ideas?: string[];
+  priority_actions: string[];
+  evidence: string[];
+  business_context?: string;
+}
+
+export interface AssetSurfaceRegistrySummary {
+  created?: number;
+  updated?: number;
+  asset_ids?: string[];
+}
+
+export interface AssetSurfaceRetrohuntSummary {
+  assets_checked?: number;
+  matches_created?: number;
+  matches_updated?: number;
+  by_type?: Record<string, number>;
+  asset_match_counts?: Record<string, number>;
+}
+
+export interface AssetIntelMatch {
+  id: string;
+  asset_id: string;
+  source_type: 'cve' | 'actor' | 'report' | string;
+  source_id: string;
+  title: string;
+  relationship: string;
+  relevance_score: number;
+  confidence: number;
+  severity: string;
+  route: string;
+  reason: string;
+  evidence: string[];
+  tags: string[];
+  status: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AssetRegistryItem {
+  id: string;
+  fingerprint: string;
+  inventory_asset_id: string;
+  name: string;
+  asset_type: string;
+  environment: string;
+  owner: string;
+  exposure: string;
+  criticality: string;
+  ip_addresses: string[];
+  domains: string[];
+  ports: number[];
+  technologies: string[];
+  products: string[];
+  suppliers: string[];
+  dependencies: string[];
+  technique_ids: string[];
+  tags: string[];
+  labels: Record<string, unknown>;
+  risk_score: number;
+  risk_level: string;
+  source_case_id?: string | null;
+  source_inventory_name: string;
+  first_seen_at: string;
+  last_seen_at: string;
+}
+
+export interface AssetSurfaceAnalysisResult {
+  case_id?: string | null;
+  case_name?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  provider: string | null;
+  model: string | null;
+  filename: string | null;
+  inventory_name: string | null;
+  asset_count: number;
+  summary: string;
+  exposure_counts: Record<string, number>;
+  risk_counts: Record<string, number>;
+  assets: AssetSurfaceAsset[];
+  top_risks: AssetSurfaceAsset[];
+  recommended_workflow: string[];
+  cross_asset_findings: string[];
+  assumptions: string[];
+  validation_gaps: string[];
+  registry_summary: AssetSurfaceRegistrySummary;
+  retrohunt_summary: AssetSurfaceRetrohuntSummary;
+  intel_matches: AssetIntelMatch[];
+  company_space_id?: string | null;
+  company_space_assets_synced?: number;
+  raw_ai_response: string;
+}
+
+export interface AssetSurfaceCaseListItem {
+  id: string;
+  name: string;
+  filename: string | null;
+  provider: string;
+  model: string;
+  use_ai: boolean;
+  asset_count: number;
+  technique_ids: string[];
+  high_or_critical_count: number;
+  summary: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export const assetSurfaceApi = {
+  analyze: (formData: FormData): Promise<AssetSurfaceAnalysisResult> =>
+    http.post('/asset-surface/analyze', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then(r => r.data),
+  cases: (): Promise<AssetSurfaceCaseListItem[]> =>
+    http.get('/asset-surface/cases').then(r => r.data),
+  case: (caseId: string): Promise<AssetSurfaceAnalysisResult> =>
+    http.get(`/asset-surface/cases/${caseId}`).then(r => r.data),
+  assets: (): Promise<AssetRegistryItem[]> =>
+    http.get('/asset-surface/assets').then(r => r.data),
+  intelMatches: (params?: { asset_id?: string; source_type?: string; limit?: number }): Promise<AssetIntelMatch[]> =>
+    http.get('/asset-surface/intel-matches', { params }).then(r => r.data),
+  retrohunt: (asset_ids: string[] = []): Promise<AssetSurfaceRetrohuntSummary> =>
+    http.post('/asset-surface/retrohunt', { asset_ids }).then(r => r.data),
+  deleteCase: (caseId: string): Promise<void> =>
+    http.delete(`/asset-surface/cases/${caseId}`).then(() => {}),
+};
+
+// ── EMB3D Embedded Device Threat Modeling ───────────────────────────────────
+
+export interface Emb3dCatalogProperty {
+  id: string;
+  name: string;
+  category: string;
+  is_subproperty: boolean;
+  stix_id: string;
+}
+
+export interface Emb3dCatalog {
+  version: string;
+  source_url: string;
+  property_count: number;
+  threat_count: number;
+  mitigation_count: number;
+  relationship_count: number;
+  categories: Record<string, number>;
+  properties: Emb3dCatalogProperty[];
+}
+
+export interface Emb3dMitigation {
+  id: string;
+  name: string;
+  description: string;
+  maturity: string;
+  stix_id: string;
+}
+
+export interface Emb3dAssetProperty extends Emb3dCatalogProperty {
+  confidence: number;
+  evidence: string[];
+  threat_count: number;
+}
+
+export interface Emb3dThreat {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  maturity: string;
+  cwes: string[];
+  cves: string[];
+  stix_id: string;
+  properties: Array<{ id: string; name: string; confidence: number }>;
+  mitigations: Emb3dMitigation[];
+}
+
+export interface Emb3dAssetReportItem {
+  asset_id: string;
+  inventory_asset_id: string;
+  name: string;
+  asset_type: string;
+  environment: string;
+  exposure: string;
+  criticality: string;
+  risk_score: number;
+  risk_level: string;
+  properties: Emb3dAssetProperty[];
+  threats: Emb3dThreat[];
+  threat_count: number;
+  mitigation_count: number;
+}
+
+export interface Emb3dTopThreat {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  maturity: string;
+  cwes: string[];
+  cves: string[];
+  stix_id: string;
+  affected_assets: number;
+}
+
+export interface Emb3dTopProperty extends Emb3dCatalogProperty {
+  matched_assets: number;
+}
+
+export interface Emb3dTopMitigation extends Emb3dMitigation {
+  recommended_for_threats: number;
+}
+
+export interface Emb3dAssetReport {
+  version: string;
+  source_url: string;
+  asset_count: number;
+  property_count: number;
+  threat_count: number;
+  mitigation_count: number;
+  category_counts: Record<string, number>;
+  top_threats: Emb3dTopThreat[];
+  top_properties: Emb3dTopProperty[];
+  top_mitigations: Emb3dTopMitigation[];
+  assets: Emb3dAssetReportItem[];
+}
+
+export const emb3dApi = {
+  catalog: (): Promise<Emb3dCatalog> =>
+    http.get('/emb3d/catalog').then(r => r.data),
+  report: (params?: { limit?: number; offset?: number }): Promise<Emb3dAssetReport> =>
+    http.get('/emb3d/assets/report', { params }).then(r => r.data),
+  assess: (asset_ids: string[] = [], limit = 200): Promise<Emb3dAssetReport> =>
+    http.post('/emb3d/assets/assess', { asset_ids, limit }).then(r => r.data),
+};
+
+// ── Saved Layers ──────────────────────────────────────────────────────────────
+
+export interface SavedLayer {
+  id: string;
+  name: string;
+  domain: string;
+  attack_version?: string;
+  technique_count: number;
+  created_at: string;
+  updated_at: string;
+  technique_ids?: string[];
+}
+
+export const layersApi = {
+  list: (domain?: string): Promise<SavedLayer[]> =>
+    http.get('/layers', { params: domain ? { domain } : {} }).then(r => r.data),
+
+  save: (name: string, technique_ids: string[], domain: string): Promise<SavedLayer> =>
+    http.post('/layers', { name, technique_ids, domain }).then(r => r.data),
+
+  load: (id: string): Promise<SavedLayer & { technique_ids: string[] }> =>
+    http.get(`/layers/${id}`).then(r => r.data),
+
+  remove: (id: string): Promise<void> =>
+    http.delete(`/layers/${id}`).then(() => {}),
+};
+
+// ── Unified intelligence RAG ────────────────────────────────────────────────
+
+export type RagProvider = 'local' | 'claude' | 'openai' | 'gemini' | 'minimax';
+
+export interface RagCitation {
+  source_ref: string;
+  source_type: string;
+  source_id: string;
+  title: string;
+  excerpt: string;
+  route: string;
+  tlp: string;
+  score: number;
+  verified: boolean;
+}
+
+export interface RagEntity {
+  source_type: string;
+  source_id: string;
+  title: string;
+  route: string;
+  tlp: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface RagNavigatorProposal {
+  id: string;
+  name: string;
+  domain: string;
+  attack_version: string;
+  technique_ids: string[];
+  rationale: string;
+  proposal_checksum: string;
+  expires_at: string;
+  requires_confirmation: true;
+}
+
+export interface RagSearchItem extends Omit<RagCitation, 'source_ref' | 'verified'> {
+  chunk_id: string;
+  document_id: string;
+  source_version: string;
+  logical_key: string;
+  domain: string;
+  legal_sensitive: boolean;
+  lexical_score: number;
+  vector_score: number;
+  exact_match: boolean;
+  retrieval_signals: string[];
+  metadata: Record<string, unknown>;
+  content_hash: string;
+  source_updated_at: string | null;
+  indexed_at: string | null;
+}
+
+export interface RagSearchResponse {
+  query: string;
+  retrieval_mode: string;
+  items: RagSearchItem[];
+  warnings: string[];
+  corpus_indexed_at: string | null;
+}
+
+export interface RagAssistResponse {
+  assistance_id: string;
+  provider: string;
+  model: string;
+  retrieval_mode: string;
+  effective_tlp: string;
+  answer: string;
+  citations: RagCitation[];
+  entities: RagEntity[];
+  cautions: string[];
+  warnings: string[];
+  navigator_proposal: RagNavigatorProposal | null;
+  requires_human_review: true;
+  execution_boundary: string;
+}
+
+export interface RagClientProfile {
+  id: number;
+  name: string;
+  sector: string;
+  region: string;
+  technologies: string[];
+  crown_jewels: string[];
+}
+
+export interface RagQueryPayload {
+  query: string;
+  source_types?: string[];
+  domain?: string;
+  attack_version?: string;
+  client_profile_id?: number;
+  limit?: number;
+}
+
+export const ragApi = {
+  status: (): Promise<Record<string, unknown>> =>
+    http.get('/rag/status').then(r => r.data),
+  profiles: (): Promise<RagClientProfile[]> =>
+    http.get('/rag/profiles').then(r => r.data),
+  createProfile: (payload: {
+    name: string;
+    sector: string;
+    region?: string;
+    technologies?: string[];
+    crown_jewels?: string[];
+    notes?: string;
+  }): Promise<RagClientProfile> =>
+    http.post('/rag/profiles', payload).then(r => r.data),
+  updateProfile: (id: number, payload: {
+    name: string;
+    sector: string;
+    region?: string;
+    technologies?: string[];
+    crown_jewels?: string[];
+    notes?: string;
+  }): Promise<RagClientProfile> =>
+    http.put(`/rag/profiles/${id}`, payload).then(r => r.data),
+  deleteProfile: (id: number): Promise<void> =>
+    http.delete(`/rag/profiles/${id}`).then(() => undefined),
+  reindex: (payload: { source_types?: string[]; include_embeddings?: boolean }): Promise<{
+    run_id: string;
+    status: 'queued';
+  }> => http.post('/rag/reindex', payload).then(r => r.data),
+  search: (payload: RagQueryPayload): Promise<RagSearchResponse> =>
+    http.post('/rag/search', payload).then(r => r.data),
+  assist: (payload: RagQueryPayload & {
+    provider: RagProvider;
+    model?: string;
+    cloud_processing_acknowledged?: boolean;
+  }): Promise<RagAssistResponse> =>
+    http.post('/rag/assist', payload).then(r => r.data),
+  confirmProposal: (
+    id: string,
+    payload: { checksum: string; mode: 'add' | 'replace' },
+  ): Promise<{
+    proposal_id: string;
+    status: 'confirmed';
+    mode: 'add' | 'replace';
+    domain: string;
+    attack_version: string;
+    technique_ids: string[];
+    warnings: string[];
+    persisted: false;
+    message: string;
+  }> => http.post(`/rag/proposals/${id}/confirm`, {
+    proposal_checksum: payload.checksum,
+    mode: payload.mode,
+  }).then(r => r.data),
+};
+
+// ── Health ────────────────────────────────────────────────────────────────────
+
+export interface StartupJobStatus {
+  status: 'pending' | 'running' | 'complete' | 'failed';
+  phase: string;
+  message: string;
+  started_at: string | null;
+  completed_at: string | null;
+  error: string | null;
+}
+
+export interface StartupStatus {
+  status: 'starting' | 'ready' | 'degraded';
+  ready: boolean;
+  started_at: string;
+  message: string;
+  reference_ingestion: StartupJobStatus;
+  jobs: Record<string, StartupJobStatus>;
+}
+
+export interface HealthStatus {
+  status: string;
+  version: string;
+  startup?: StartupStatus;
+}
+
+export const healthApi = {
+  check: (): Promise<HealthStatus> =>
+    http.get('/health', { skipGlobalError: true } as any).then(r => r.data),
+};
+
+export interface SelfTestCheck {
+  name: string;
+  status: 'ok' | 'degraded' | 'warning' | 'error';
+  message: string;
+  details: Record<string, unknown>;
+}
+
+export interface SelfTestResult {
+  status: 'ok' | 'degraded' | 'error';
+  version: string;
+  checked_at: string;
+  duration_ms: number;
+  checks: SelfTestCheck[];
+}
+
+export interface ApiOperationCapability {
+  method: string;
+  path: string;
+  operation_id: string;
+  summary: string;
+  success_codes: string[];
+  deprecated: boolean;
+}
+
+export interface ApiModuleCapability {
+  name: string;
+  operation_count: number;
+  operations: ApiOperationCapability[];
+}
+
+export interface ApiCapabilities {
+  name: string;
+  version: string;
+  openapi_url: string;
+  docs_url: string;
+  redoc_url: string;
+  module_count: number;
+  path_count: number;
+  operation_count: number;
+  generated_at: string;
+  modules: ApiModuleCapability[];
+}
+
+export interface TroubleshootingAssistantRequest {
+  provider: 'local' | 'claude' | 'openai' | 'gemini' | 'minimax';
+  model?: string;
+  error_message?: string;
+  status?: string;
+  url?: string;
+  operator_notes?: string;
+  selftest_result?: SelfTestResult;
+  include_docker_commands?: boolean;
+}
+
+export interface TroubleshootingAssistantResponse {
+  provider: string;
+  model: string;
+  ai_used: boolean;
+  severity: 'low' | 'medium' | 'high' | 'critical';
+  summary: string;
+  likely_root_cause: string;
+  immediate_actions: string[];
+  validation_commands: string[];
+  evidence_to_collect: string[];
+  do_not_do: string[];
+  raw_response: string;
+}
+
+export const systemApi = {
+  capabilities: (): Promise<ApiCapabilities> =>
+    http.get('/system/capabilities').then(r => r.data),
+  selftest: (): Promise<SelfTestResult> =>
+    http.get('/system/selftest').then(r => r.data),
+  normalizeTaxonomy: (): Promise<{ rows_changed: number; tables: Record<string, unknown> }> =>
+    http.post('/system/taxonomy/normalize').then(r => r.data),
+  startup: (): Promise<StartupStatus> =>
+    http.get('/system/startup').then(r => r.data),
+  troubleshootingAssistant: (payload: TroubleshootingAssistantRequest): Promise<TroubleshootingAssistantResponse> =>
+    http.post('/troubleshooting/assistant', payload, { skipGlobalError: true } as any).then(r => r.data),
+};
+
+// ── MITRE Sync ────────────────────────────────────────────────────────────────
+
+export interface DomainStatus {
+  source: string;
+  domain: string;
+  current_version: string | null;
+  latest_version: string | null;
+  needs_update: boolean;
+  last_ingested: string | null;
+  content: string[];
+}
+
+export interface SyncSource {
+  id: string;
+  label: string;
+  status: string;
+  content: string[];
+  domains: string[];
+  schedule: string | null;
+}
+
+export const syncApi = {
+  status: (): Promise<{ sources: SyncSource[]; domains: DomainStatus[]; any_updates_needed: boolean }> =>
+    http.get('/sync/status').then(r => r.data),
+
+  trigger: (payload?: { source?: string; domains?: string[]; force?: boolean }): Promise<{
+    task_id: string;
+    status: string;
+    source: string;
+    domains: string[];
+    force: boolean;
+  }> =>
+    http.post('/sync/trigger', payload ?? {}).then(r => r.data),
+
+  taskStatus: (taskId: string): Promise<{ status: string; result: unknown }> =>
+    http.get(`/sync/task/${taskId}`).then(r => r.data),
+
+  ioc: (days = 7, options?: IOCSyncOptions): Promise<{
+    days: number;
+    totals: { inserted: number; updated: number; actor_links: number; ttp_enriched?: number };
+    sources: Array<Record<string, unknown>>;
+  }> =>
+    http.post('/sync/ioc', null, { params: { days, ...options } }).then(r => r.data),
+
+  cve: (days = 7): Promise<{
+    days: number;
+    totals: { inserted: number; updated: number };
+    sources: Array<Record<string, unknown>>;
+    correlations: Record<string, number>;
+  }> =>
+    http.post('/sync/cve', null, { params: { days } }).then(r => r.data),
+
+  dynamicDb: (params?: { days?: number; force_attack?: boolean }): Promise<{
+    attack: unknown;
+    sector: Record<string, unknown> | null;
+    ioc: Record<string, unknown> | null;
+    cve: Record<string, unknown> | null;
+  }> =>
+    http.post('/sync/dynamic-db', null, { params: { days: params?.days ?? 7, force_attack: params?.force_attack ?? false } }).then(r => r.data),
+};
+
+// ── Export ────────────────────────────────────────────────────────────────────
+
+export const exportApi = {
+  analysisUrl: (sessionId: string) => `/api/export/analysis/${sessionId}`,
+  analysisStixUrl: (sessionId: string) => `/api/export/analysis/${sessionId}/stix`,
+
+  layer: (techniqueIds: string[], domain: string): Promise<Blob> =>
+    http.post(
+      '/export/layer',
+      { technique_ids: techniqueIds, domain },
+      { responseType: 'blob' },
+    ).then(r => r.data as Blob),
+};
+
+// ── Operational Intelligence ──────────────────────────────────────────────────
+
+export interface Investigation {
+  id: string; name: string; description: string; status: string; domain: string;
+  actor_ids: string[]; technique_ids: string[]; report_ids: string[];
+  evidence_nodes: Array<Record<string, unknown>>; evidence_edges: Array<Record<string, unknown>>;
+  timeline: Array<Record<string, unknown>>; created_at: string; updated_at: string;
+}
+export interface IntakeRecord {
+  id: string; title: string; url: string; publisher: string; status: string; summary: string;
+  source_reliability: string; actor_ids: string[]; technique_ids: string[];
+  indicators: Array<Record<string, unknown>>; analyst_notes: string; created_at: string; updated_at: string;
+}
+export interface DetectionCandidate {
+  id: string; title: string; technique_id: string; status: string; owner: string;
+  telemetry: string[]; query_language: string; query: string; validation_notes: string;
+  source_refs: string[]; created_at: string; updated_at: string;
+}
+export interface TrackedActor {
+  id: string; actor_id: string; actor_name: string; last_snapshot: Record<string, unknown>;
+  change_log: Array<Record<string, unknown>>; created_at: string; updated_at: string;
+}
+const operations = '/operations';
+export const operationsApi = {
+  investigations: (): Promise<Investigation[]> => http.get(`${operations}/investigations`).then(r => r.data),
+  createInvestigation: (body: Omit<Investigation, 'id' | 'created_at' | 'updated_at'>): Promise<Investigation> => http.post(`${operations}/investigations`, body).then(r => r.data),
+  updateInvestigation: (id: string, body: Omit<Investigation, 'id' | 'created_at' | 'updated_at'>): Promise<Investigation> => http.put(`${operations}/investigations/${id}`, body).then(r => r.data),
+  removeInvestigation: (id: string): Promise<void> => http.delete(`${operations}/investigations/${id}`).then(() => {}),
+  intake: (): Promise<IntakeRecord[]> => http.get(`${operations}/intake`).then(r => r.data),
+  createIntake: (body: Omit<IntakeRecord, 'id' | 'created_at' | 'updated_at'>): Promise<IntakeRecord> => http.post(`${operations}/intake`, body).then(r => r.data),
+  updateIntake: (id: string, body: Omit<IntakeRecord, 'id' | 'created_at' | 'updated_at'>): Promise<IntakeRecord> => http.put(`${operations}/intake/${id}`, body).then(r => r.data),
+  removeIntake: (id: string): Promise<void> => http.delete(`${operations}/intake/${id}`).then(() => {}),
+  detections: (): Promise<DetectionCandidate[]> => http.get(`${operations}/detections`).then(r => r.data),
+  createDetection: (body: Omit<DetectionCandidate, 'id' | 'created_at' | 'updated_at'>): Promise<DetectionCandidate> => http.post(`${operations}/detections`, body).then(r => r.data),
+  updateDetection: (id: string, body: Omit<DetectionCandidate, 'id' | 'created_at' | 'updated_at'>): Promise<DetectionCandidate> => http.put(`${operations}/detections/${id}`, body).then(r => r.data),
+  removeDetection: (id: string): Promise<void> => http.delete(`${operations}/detections/${id}`).then(() => {}),
+  trackedActors: (): Promise<TrackedActor[]> => http.get(`${operations}/tracked-actors`).then(r => r.data),
+  trackActor: (body: { actor_id: string; actor_name: string; snapshot: Record<string, unknown> }): Promise<TrackedActor> => http.post(`${operations}/tracked-actors`, body).then(r => r.data),
+  removeTrackedActor: (id: string): Promise<void> => http.delete(`${operations}/tracked-actors/${id}`).then(() => {}),
+};
+
+// ── Collection, Enrichment, and Detection Pipeline ───────────────────────────
+
+export interface CollectionSource {
+  id: string; name: string; kind: 'rss' | 'taxii' | 'misp' | 'atlas' | 'sigma' | 'yara' | 'yaral' | 'sandbox'; url: string; enabled: boolean;
+  interval_minutes: number; config: Record<string, unknown>; last_run_at: string | null; created_at: string; updated_at: string;
+}
+export interface CollectionRun {
+  id: string; source_id: string | null; status: string; items_seen: number; items_created: number;
+  observables_created: number; error: string; started_at: string; completed_at: string | null;
+}
+export interface Observable {
+  id: string; type: string; value: string; normalized_value: string; status: string; confidence: number;
+  tags: string[]; source_refs: string[]; first_seen_at: string; last_seen_at: string;
+}
+export interface DetectionVersion {
+  id: string; title: string; technique_id: string; format: string; content: string;
+  validation: {
+    valid: boolean;
+    errors: string[];
+    warnings: string[];
+    source_url?: string;
+    rule_id?: string;
+    generation?: string;
+    provider?: string;
+    model?: string;
+  };
+  created_by: string; created_at: string;
+}
+export interface AuditEvent {
+  id: string; actor: string; action: string; object_type: string; object_id: string;
+  details: Record<string, unknown>; created_at: string;
+}
+export interface SandboxBehavior {
+  id: string;
+  observable_id: string;
+  observable_type: string;
+  observable: string;
+  provider: string;
+  verdict: string;
+  confidence: number;
+  created_at: string;
+  report_id: string;
+  source_url: string;
+  sandbox: string;
+  malware_family: string;
+  score: number | string | null;
+  ttps: string[];
+  signatures: Array<{ name: string; severity: string; source: string }>;
+  processes: string[];
+  network: { ips?: string[]; domains?: string[]; urls?: string[] };
+  tags: string[];
+}
+const pipeline = '/pipeline';
+export const pipelineApi = {
+  me: (): Promise<CurrentUser> => authApi.me(),
+  sources: (): Promise<CollectionSource[]> => http.get(`${pipeline}/sources`).then(r => r.data),
+  createSource: (body: Omit<CollectionSource, 'id'|'last_run_at'|'created_at'|'updated_at'>): Promise<CollectionSource> => http.post(`${pipeline}/sources`, body).then(r => r.data),
+  createDefaultRuleFeeds: (): Promise<CollectionSource[]> => http.post(`${pipeline}/rule-feeds/defaults`).then(r => r.data),
+  runSource: (id: string): Promise<CollectionRun> => http.post(`${pipeline}/sources/${id}/run`).then(r => r.data),
+  runs: (): Promise<CollectionRun[]> => http.get(`${pipeline}/runs`).then(r => r.data),
+  observables: (): Promise<Observable[]> => http.get(`${pipeline}/observables`).then(r => r.data),
+  sandboxBehaviors: (): Promise<SandboxBehavior[]> => http.get(`${pipeline}/sandbox/behaviors`).then(r => r.data),
+  createObservable: (body: {type:string;value:string;status:string;confidence:number;tags:string[];source_refs:string[]}): Promise<Observable> => http.post(`${pipeline}/observables`, body).then(r => r.data),
+  enrich: (id: string): Promise<Record<string, unknown>> => http.post(`${pipeline}/observables/${id}/enrich`).then(r => r.data),
+  generate: (body: {
+    title: string;
+    technique_id: string;
+    format: string;
+    telemetry: string[];
+    use_ai?: boolean;
+    provider?: 'local' | 'claude' | 'openai' | 'gemini' | 'minimax';
+    model?: string;
+    context?: string;
+  }): Promise<DetectionVersion> => http.post(`${pipeline}/detections/generate`, body).then(r => r.data),
+  validate: (format: string, content: string): Promise<{valid:boolean;errors:string[];warnings:string[]}> => http.post(`${pipeline}/detections/validate`, {format,content}).then(r => r.data),
+  versions: (): Promise<DetectionVersion[]> => http.get(`${pipeline}/detections/versions`).then(r => r.data),
+  audit: (): Promise<AuditEvent[]> => http.get(`${pipeline}/audit`).then(r => r.data),
+  importJson: (kind: 'stix'|'misp'|'atlas', body: Record<string, unknown>): Promise<Record<string, unknown>> => http.post(`${pipeline}/import/${kind}`, body).then(r => r.data),
+};
+
+// ── Sector Intelligence and Actor Relevance ─────────────────────────────────
+
+export interface SectorOption {
+  id: string;
+  label: string;
+  actor_count: number;
+}
+
+export interface RegionOption {
+  id: string;
+  label: string;
+  actor_count: number;
+}
+
+export interface TechnologyOption {
+  id: string;
+  label: string;
+}
+
+export interface IntelSourceStatus {
+  source_id: string;
+  label: string;
+  kind: string;
+  url: string;
+  enabled: boolean;
+  last_synced_at: string | null;
+  sync_status: string;
+  sync_error: string;
+}
+
+export interface ActorRelevance {
+  actor_attack_id: string;
+  actor_name: string;
+  aliases: string[];
+  score: number;
+  relevance: 'high' | 'medium' | 'low';
+  technique_count: number;
+  recent_campaign_count: number;
+  campaign_count: number;
+  last_activity: string | null;
+  reasons: string[];
+  evidence: Array<{
+    type: string;
+    value: string;
+    source: string;
+    url: string;
+    confidence: number;
+    evidence: string;
+  }>;
+  techniques: Array<{
+    attack_id: string;
+    name: string;
+    tactics: string[];
+  }>;
+}
+
+export const sectorApi = {
+  sources: (): Promise<IntelSourceStatus[]> => http.get('/sector/sources').then(r => r.data),
+  sectors: (): Promise<SectorOption[]> => http.get('/sector/sectors').then(r => r.data),
+  regions: (): Promise<RegionOption[]> => http.get('/sector/regions').then(r => r.data),
+  technologies: (): Promise<TechnologyOption[]> => http.get('/sector/technologies').then(r => r.data),
+  syncMispGalaxy: (): Promise<{source: string; actors: number; matched: number; observations: number}> =>
+    http.post('/sector/sync/misp-galaxy').then(r => r.data),
+  relevance: (params: {
+    sectors: string[];
+    regions?: string[];
+    technologies?: string[];
+    days?: number;
+    domain?: string;
+    limit?: number;
+  }): Promise<ActorRelevance[]> =>
+    {
+      const query = new URLSearchParams();
+      params.sectors.forEach(item => query.append('sectors', item));
+      (params.regions ?? []).forEach(item => query.append('regions', item));
+      (params.technologies ?? []).forEach(item => query.append('technologies', item));
+      query.set('days', String(params.days ?? 365));
+      query.set('domain', params.domain ?? 'enterprise-attack');
+      query.set('limit', String(params.limit ?? 25));
+      return http.get(`/sector/relevance?${query.toString()}`).then(r => r.data);
+    },
+};
+
+// ── MalwareGraph Integrated Malware Analysis ────────────────────────────────
+
+export interface MalwareGraphJob {
+  job_id: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  case_id: string | null;
+  archive_name: string | null;
+  error: string | null;
+}
+
+export interface MalwareGraphEntity {
+  entity_id: string;
+  type: string;
+  value: string;
+  normalized_value: string;
+  source_stage: string;
+  confidence: number;
+  evidence_refs: string[];
+  adversarygraph_route: string | null;
+  ai_suggested: boolean;
+  metadata: Record<string, unknown>;
+}
+
+export interface MalwareGraphRelationship {
+  relationship_id: string;
+  source_ref: string;
+  relationship_type: string;
+  target_ref: string;
+  evidence_refs: string[];
+  confidence: number;
+}
+
+export interface MalwareGraphAnalysis {
+  schema_version: string;
+  case_id: string | null;
+  job_id: string;
+  sample: {
+    names: string[];
+    hashes: Record<string, string>;
+    file_type: string;
+    size_bytes: number;
+    extracted_files: Array<{
+      name: string;
+      size_bytes: number;
+      file_type: string;
+      hashes: Record<string, string>;
+      source?: string;
+      source_entity_id?: string | null;
+      entity_prefix?: string;
+    }>;
+  };
+  iocs: MalwareGraphEntity[];
+  behaviors: MalwareGraphEntity[];
+  attack_mappings: MalwareGraphEntity[];
+  entities: MalwareGraphEntity[];
+  relationships: MalwareGraphRelationship[];
+  family_hypotheses: Array<Record<string, unknown>>;
+  actor_similarity_leads: Array<Record<string, unknown>>;
+  detections: Array<Record<string, unknown>>;
+  artifacts: Array<Record<string, unknown>>;
+  evidence: Array<Record<string, unknown>>;
+  ai_assistance: Array<Record<string, unknown>>;
+  safety: {
+    executed: boolean;
+    network_mode: string;
+    sandbox_profile: string;
+    third_party_binary_submission: boolean;
+    dynamic_analysis_requested?: boolean;
+    decompilation_performed?: boolean;
+    runtime_debug_requested?: boolean;
+    runtime_debug_enabled?: boolean;
+    runtime_debug_disclaimer_accepted?: boolean;
+  };
+}
+
+export interface MalwareGraphFirstAnalysis {
+  artifact_id: string;
+  type: 'first-analysis';
+  target_entity_id: string;
+  target_name: string;
+  file_type: string;
+  magic_bytes: string;
+  entropy: number;
+  entropy_blocks?: Array<{
+    offset: number;
+    size: number;
+    entropy: number | null;
+    truncated?: boolean;
+  }>;
+  packed: boolean;
+  packer: string | null;
+  obfuscated: boolean;
+  obfuscation_signals: string[];
+  hashes: Record<string, string>;
+  size_bytes: number;
+}
+
+export interface MalwareGraphPeHeaders {
+  artifact_id: string;
+  type: 'pe-headers';
+  target_entity_id: string;
+  target_name: string;
+  valid_pe: boolean;
+  dos_header: Record<string, unknown>;
+  coff_header: Record<string, unknown>;
+  optional_header: Record<string, unknown>;
+  sections: Array<Record<string, unknown>>;
+  warnings: string[];
+}
+
+export interface MalwareGraphWorkflow {
+  job_id: string;
+  layout: string;
+  nodes: Array<{
+    id: string;
+    label: string;
+    type: string;
+    stage: string;
+    route: string | null;
+    confidence: number;
+    metadata: Record<string, unknown>;
+  }>;
+  edges: Array<{
+    id: string;
+    source: string;
+    target: string;
+    relationship: string;
+    confidence: number;
+  }>;
+}
+
+export interface MalwareGraphDebugSession {
+  session_id: string;
+  job_id: string;
+  sample_ref: string;
+  mode: string;
+  dynamic_enabled: boolean;
+  warning: string | null;
+  steps: Array<{
+    step_id: string;
+    action: string;
+    status: string;
+    target: string | null;
+    notes: string;
+    snapshot: Record<string, unknown>;
+  }>;
+}
+
+export interface MalwareGraphRuntimeDebugSession extends MalwareGraphDebugSession {
+  isolation: Record<string, unknown>;
+  current_step: number;
+  completed: boolean;
+}
+
+export interface MalwareGraphDebuggerWorkspace {
+  _schema: string;
+  session_id: string;
+  job_id: string;
+  sample_ref: string;
+  target_entity_id: string;
+  target_name: string;
+  file_type: string;
+  created_at: string;
+  mode: string;
+  dynamic_enabled: boolean;
+  warning: string | null;
+  ai_provider: string;
+  engine: Record<string, unknown>;
+  safety: Record<string, unknown>;
+  isolation: Record<string, unknown>;
+  binary: Record<string, unknown>;
+  entrypoint: Record<string, unknown> | null;
+  controls: Array<Record<string, unknown>>;
+  breakpoints: Array<Record<string, unknown>>;
+  registers: Array<{ name: string; entry: string; exit: string; changed: boolean }>;
+  memory_regions: Array<Record<string, unknown>>;
+  api_hooks: Array<Record<string, unknown>>;
+  api_calls: Array<Record<string, unknown>>;
+  network_events: Array<Record<string, unknown>>;
+  function_traces: Array<{
+    trace_id: string;
+    node_id: string;
+    address: string;
+    address_int: number;
+    rva: string | null;
+    name: string;
+    status: string;
+    executed: boolean;
+    source: string;
+    section: string | null;
+    is_entrypoint?: boolean;
+    confidence: number;
+    instruction_count: number;
+    disassembly: Array<Record<string, unknown>>;
+    calls_to: string[];
+    called_from: string[];
+    api_hooks?: string[];
+    strings_referenced: string[];
+    risk_level: string;
+    mitre_technique: string;
+    summary: string;
+    behaviors: string[];
+    notes: string;
+    snapshot: Record<string, unknown>;
+    adversarygraph_route: string;
+  }>;
+  graph: MalwareGraphWorkflow;
+  decompilation: Record<string, unknown>;
+  current_trace_index: number;
+  current_trace_id: string;
+  current_snapshot: Record<string, unknown>;
+  step_count: number;
+  completed: boolean;
+  events: Array<Record<string, unknown>>;
+  risk_summary: Record<string, number>;
+  attack_leads: Array<Record<string, unknown>>;
+  ioc_leads: Array<Record<string, unknown>>;
+  ai_assistant?: MalwareGraphDebugAssistant | null;
+  export: Record<string, unknown>;
+}
+
+export interface MalwareGraphDebugAssistant {
+  status: string;
+  provider: string;
+  model: string;
+  generated_at: string;
+  assessment: {
+    summary?: string;
+    main_purpose?: string;
+    entrypoint_assessment?: string;
+    function_analysis?: Array<Record<string, unknown>>;
+    malicious_or_suspicious_functions?: Array<Record<string, unknown>>;
+    suspicious_functions?: Array<Record<string, unknown>>;
+    ttps?: Array<Record<string, unknown>>;
+    iocs?: Array<Record<string, unknown>>;
+    debug_next_steps?: string[];
+    api_hooks_to_prioritize?: string[];
+    ioc_or_ttp_leads?: Array<Record<string, unknown>>;
+    validation_gaps?: string[];
+    raw_response?: string;
+  };
+  prompt_context: Record<string, unknown>;
+  error?: string;
+}
+
+export interface MalwareGraphDecompilation {
+  artifact_id: string;
+  type: 'decompilation';
+  target_entity_id: string;
+  target_name: string;
+  file_type: string;
+  status: string;
+  toolchain: string;
+  mode: string;
+  executed: boolean;
+  language?: string;
+  entrypoint?: string;
+  entrypoint_details?: Record<string, unknown>;
+  api_calls: string[];
+  interesting_strings: string[];
+  pseudocode: string[];
+  source_preview?: string[];
+  android_references?: string[];
+  sections?: Array<Record<string, unknown>>;
+  warnings: string[];
+}
+
+export interface MalwareGraphStringsAnalysis {
+  job_id: string;
+  sample_ref: string;
+  target_name: string;
+  target_entity_id: string;
+  entropy: number;
+  obfuscated: boolean;
+  filters: Record<string, unknown>;
+  strings_total: number;
+  strings: string[];
+  strings_preview: string[];
+  categories: Record<string, string[]>;
+  findings: Array<{
+    category: string;
+    value: string;
+    severity: 'info' | 'low' | 'medium' | 'high';
+    adversarygraph_route: string | null;
+  }>;
+  ioc_leads: Array<{
+    type: string;
+    value: string;
+    category: string;
+    confidence: number;
+    adversarygraph_route: string | null;
+  }>;
+  ttp_leads: Array<{
+    attack_id: string;
+    name: string;
+    confidence: number;
+    evidence: string;
+    navigator_route: string;
+  }>;
+  ai_prompt: string | null;
+  ai_analysis: string | null;
+  ai_provider: string | null;
+  ai_status: string;
+}
+
+export interface MalwareGraphFullAiAnalysis {
+  [key: string]: unknown;
+  artifact_id: string;
+  type: 'ai-full-analysis';
+  job_id: string;
+  source_target_entity_id: string;
+  target_entity_id: string;
+  ai_provider: string;
+  started_at: string;
+  completed_at: string;
+  status: string;
+  stage_status: Record<string, string>;
+  completed_stages: number;
+  failed_stages: number;
+  summary: string;
+  main_purpose?: string;
+  stage_results: Record<string, unknown>;
+  report_ready: boolean;
+  report_summary?: string;
+  report_verdict?: string;
+  report_score?: number;
+  routes: Record<string, string>;
+}
+
+export interface MalwareGraphUnpackPlan {
+  job_id: string;
+  sample_ref: string;
+  target_name: string;
+  target_entity_id: string;
+  packed: boolean;
+  packer: string | null;
+  entropy: number | null;
+  status: string;
+  safety: Record<string, unknown>;
+  output: {
+    artifact_id: string;
+    target_entity_id: string;
+    name: string;
+    relative_path: string;
+    size_bytes: number;
+    file_type: string;
+    hashes: Record<string, string>;
+  } | null;
+  runtime_unpack: {
+    required: boolean;
+    status: string;
+    blocked_by_policy: boolean;
+    dynamic_debug_enabled: boolean;
+    dynamic_request_enabled: boolean;
+    global_dynamic_debug_enabled: boolean;
+    runtime_debug_disclaimer_accepted: boolean;
+    engine: string;
+    engine_available: boolean;
+    profile: string;
+    architecture: Record<string, unknown>;
+    static_error: string | null;
+    requirements: string[];
+    safety: Record<string, unknown>;
+    next_steps: string[];
+    notes: string;
+  } | null;
+  runtime_execution?: {
+    started: boolean;
+    status: string;
+    engine: string;
+    profile: string;
+    output: unknown;
+    steps: Array<{
+      step_id: string;
+      action: string;
+      status: string;
+      notes: string;
+    }>;
+    log: string[];
+    notes: string;
+  } | null;
+  validation: {
+    output_exists: boolean;
+    source_size_bytes: number;
+    output_size_bytes: number;
+    size_delta_bytes: number;
+    source_entropy: number;
+    output_entropy: number;
+    entropy_delta: number;
+    output_file_type: string;
+    still_detected_packed: boolean;
+    packer_after_unpack: string | null;
+  } | null;
+  log: string[];
+  error?: string;
+  steps: Array<{
+    step_id: string;
+    action: string;
+    status: string;
+    notes: string;
+  }>;
+}
+
+export interface MalwareGraphObfuscationAnalysis {
+  job_id: string;
+  sample_ref: string;
+  target_name: string;
+  target_entity_id: string;
+  ai_provider: string;
+  ai_status: string;
+  obfuscated: boolean;
+  signals: string[];
+  techniques: Array<{
+    technique: string;
+    confidence: number;
+    evidence: string;
+  }>;
+  summary: string;
+}
+
+export interface MalwareGraphReportTag {
+  namespace: string;
+  value: string;
+  route: string | null;
+  count: number;
+}
+
+export interface MalwareGraphHeuristic {
+  heuristic_id: string;
+  name: string;
+  score: number;
+  severity: 'info' | 'low' | 'medium' | 'high' | 'critical';
+  evidence: string;
+  target_entity_id: string | null;
+  tags: string[];
+  attack_ids: string[];
+}
+
+export interface MalwareGraphServiceResult {
+  service_id: string;
+  name: string;
+  stage: string;
+  status: 'completed' | 'blocked' | 'skipped' | 'failed' | 'ready' | 'requires-dynamic-checkbox';
+  score: number;
+  summary: string;
+  target_entity_id: string | null;
+  details: Record<string, unknown>;
+  routes: Record<string, string>;
+}
+
+export interface MalwareGraphFileReport {
+  target_entity_id: string;
+  name: string;
+  file_type: string;
+  size_bytes: number;
+  hashes: Record<string, string>;
+  entropy: number | null;
+  packed: boolean;
+  packer: string | null;
+  obfuscated: boolean;
+  tags: string[];
+  service_results: string[];
+  viewer_routes: Record<string, string>;
+}
+
+export interface MalwareGraphSubmissionReport {
+  schema_version: string;
+  job_id: string;
+  case_id: string | null;
+  verdict: 'informational' | 'suspicious' | 'highly-suspicious' | 'malicious';
+  score: number;
+  summary: string;
+  safety: MalwareGraphAnalysis['safety'];
+  tags: MalwareGraphReportTag[];
+  heuristics: MalwareGraphHeuristic[];
+  service_results: MalwareGraphServiceResult[];
+  files: MalwareGraphFileReport[];
+  iocs: MalwareGraphEntity[];
+  ttps: Array<{
+    attack_id: string;
+    name: string;
+    confidence: number;
+    evidence: string;
+    navigator_route: string;
+  }>;
+  artifacts: Array<Record<string, unknown>>;
+  generated_at: string;
+}
+
+export interface MalwareGraphFilePreview {
+  schema_version: string;
+  job_id: string;
+  sample_ref: string;
+  target_entity_id: string;
+  target_name: string;
+  mode: 'strings' | 'ascii' | 'hex';
+  size_bytes: number;
+  limit: number;
+  truncated: boolean;
+  lines: string[];
+  safety: Record<string, unknown>;
+}
+
+export interface MalwareGraphProvider {
+  provider: string;
+  configured: boolean;
+  model: string;
+  env_var: string;
+}
+
+export const malwareGraphApi = {
+  health: (): Promise<Record<string, unknown>> => http.get('/malwaregraph/health').then(r => r.data),
+  providers: (): Promise<MalwareGraphProvider[]> => http.get('/malwaregraph/llm/providers').then(r => r.data),
+  jobs: (): Promise<MalwareGraphJob[]> => http.get('/malwaregraph/analyses').then(r => r.data),
+  submit: (body: { file: File; password?: string; case_id?: string; dynamic_analysis?: boolean; runtime_debug_disclaimer_accepted?: boolean }): Promise<MalwareGraphAnalysis> => {
+    const form = new FormData();
+    form.append('file', body.file);
+    if (body.password) form.append('password', body.password);
+    if (body.case_id) form.append('case_id', body.case_id);
+    form.append('dynamic_analysis', body.dynamic_analysis ? 'true' : 'false');
+    form.append('runtime_debug_disclaimer_accepted', body.runtime_debug_disclaimer_accepted ? 'true' : 'false');
+    return http.post('/malwaregraph/analyses', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data);
+  },
+  analysis: (jobId: string): Promise<MalwareGraphAnalysis> =>
+    http.get(`/malwaregraph/analyses/${jobId}`).then(r => r.data),
+  report: (jobId: string): Promise<MalwareGraphSubmissionReport> =>
+    http.get(`/malwaregraph/analyses/${jobId}/report`).then(r => r.data),
+  workflow: (jobId: string): Promise<MalwareGraphWorkflow> =>
+    http.get(`/malwaregraph/analyses/${jobId}/workflow-graph`).then(r => r.data),
+  debugSession: (
+    jobId: string,
+    sampleRef = 'archive--file--0001',
+    dynamicAnalysis = false,
+    runtimeDebugDisclaimerAccepted = false,
+  ): Promise<MalwareGraphDebugSession> =>
+    http.post(`/malwaregraph/analyses/${jobId}/debug-sessions`, null, {
+      params: {
+        sample_ref: sampleRef,
+        dynamic_analysis: dynamicAnalysis,
+        runtime_debug_disclaimer_accepted: runtimeDebugDisclaimerAccepted,
+      },
+    }).then(r => r.data),
+  runtimeDebugSession: (
+    jobId: string,
+    sampleRef = 'archive--file--0001',
+    dynamicAnalysis = false,
+    runtimeDebugDisclaimerAccepted = false,
+  ): Promise<MalwareGraphRuntimeDebugSession> =>
+    http.post(`/malwaregraph/analyses/${jobId}/runtime-debug-sessions`, null, {
+      params: {
+        sample_ref: sampleRef,
+        dynamic_analysis: dynamicAnalysis,
+        runtime_debug_disclaimer_accepted: runtimeDebugDisclaimerAccepted,
+      },
+    }).then(r => r.data),
+  debugWorkspace: (
+    jobId: string,
+    sampleRef = 'archive--file--0001',
+    aiProvider = 'local',
+    dynamicAnalysis = false,
+    runtimeDebugDisclaimerAccepted = false,
+  ): Promise<MalwareGraphDebuggerWorkspace> =>
+    http.post(`/malwaregraph/analyses/${jobId}/debug-workspaces`, null, {
+      params: {
+        sample_ref: sampleRef,
+        ai_provider: aiProvider,
+        dynamic_analysis: dynamicAnalysis,
+        runtime_debug_disclaimer_accepted: runtimeDebugDisclaimerAccepted,
+      },
+    }).then(r => r.data),
+  getDebugWorkspace: (sessionId: string): Promise<MalwareGraphDebuggerWorkspace> =>
+    http.get(`/malwaregraph/debug-workspaces/${sessionId}`, { skipGlobalError: true } as any).then(r => r.data),
+  stepDebugWorkspace: (sessionId: string): Promise<MalwareGraphDebuggerWorkspace> =>
+    http.post(`/malwaregraph/debug-workspaces/${sessionId}/step`, null, { skipGlobalError: true } as any).then(r => r.data),
+  debugWorkspaceAiAssistant: (sessionId: string, aiProvider = 'local'): Promise<MalwareGraphDebugAssistant> =>
+    http.post(`/malwaregraph/debug-workspaces/${sessionId}/ai-assistant`, null, { params: { ai_provider: aiProvider }, skipGlobalError: true } as any).then(r => r.data),
+  decompilation: (jobId: string, sampleRef = 'archive--file--0001'): Promise<MalwareGraphDecompilation> =>
+    http.post(`/malwaregraph/analyses/${jobId}/decompilation`, null, { params: { sample_ref: sampleRef } }).then(r => r.data),
+  stepRuntimeDebugSession: (sessionId: string): Promise<MalwareGraphRuntimeDebugSession> =>
+    http.post(`/malwaregraph/runtime-debug-sessions/${sessionId}/step`).then(r => r.data),
+  strings: (jobId: string, sampleRef = 'archive--file--0001', ai = false, aiProvider = 'local', filters?: { min_chars?: number; max_chars?: number | null }): Promise<MalwareGraphStringsAnalysis> =>
+    http.get(`/malwaregraph/analyses/${jobId}/strings`, { params: { sample_ref: sampleRef, ai, ai_provider: aiProvider, min_chars: filters?.min_chars ?? 4, max_chars: filters?.max_chars ?? undefined } }).then(r => r.data),
+  filePreview: (jobId: string, sampleRef = 'archive--file--0001', mode: 'strings' | 'ascii' | 'hex' = 'strings', limit = 200): Promise<MalwareGraphFilePreview> =>
+    http.get(`/malwaregraph/analyses/${jobId}/files/preview`, { params: { sample_ref: sampleRef, mode, limit } }).then(r => r.data),
+  unpack: (
+    jobId: string,
+    sampleRef = 'archive--file--0001',
+    dynamicAnalysis = false,
+    runtimeDebugDisclaimerAccepted = false,
+  ): Promise<MalwareGraphUnpackPlan> =>
+    http.post(`/malwaregraph/analyses/${jobId}/unpack`, null, {
+      params: {
+        sample_ref: sampleRef,
+        dynamic_analysis: dynamicAnalysis,
+        runtime_debug_disclaimer_accepted: runtimeDebugDisclaimerAccepted,
+      },
+    }).then(r => r.data),
+  runtimeUnpack: (
+    jobId: string,
+    sampleRef = 'archive--file--0001',
+    dynamicAnalysis = false,
+    runtimeDebugDisclaimerAccepted = false,
+  ): Promise<MalwareGraphUnpackPlan> =>
+    http.post(`/malwaregraph/analyses/${jobId}/unpack/runtime`, null, {
+      params: {
+        sample_ref: sampleRef,
+        dynamic_analysis: dynamicAnalysis,
+        runtime_debug_disclaimer_accepted: runtimeDebugDisclaimerAccepted,
+      },
+    }).then(r => r.data),
+  obfuscationAnalysis: (jobId: string, sampleRef = 'archive--file--0001', aiProvider = 'local'): Promise<MalwareGraphObfuscationAnalysis> =>
+    http.post(`/malwaregraph/analyses/${jobId}/obfuscation-analysis`, null, { params: { sample_ref: sampleRef, ai_provider: aiProvider } }).then(r => r.data),
+  aiFullAnalysis: (
+    jobId: string,
+    sampleRef = 'archive--file--0001',
+    aiProvider = 'local',
+    dynamicAnalysis = false,
+    runtimeDebugDisclaimerAccepted = false,
+    preferUnpackedOutput = true,
+  ): Promise<MalwareGraphFullAiAnalysis> =>
+    http.post(`/malwaregraph/analyses/${jobId}/ai-full-analysis`, null, {
+      params: {
+        sample_ref: sampleRef,
+        ai_provider: aiProvider,
+        dynamic_analysis: dynamicAnalysis,
+        runtime_debug_disclaimer_accepted: runtimeDebugDisclaimerAccepted,
+        prefer_unpacked_output: preferUnpackedOutput,
+      },
+    }).then(r => r.data),
+
+  saveUnpacked: (jobId: string): Promise<SavedUnpackedLayer[]> =>
+    http.post(`/malwaregraph/analyses/${jobId}/save-unpacked`).then(r => r.data),
+
+  injectFile: (jobId: string, file: File, sourceLabel: string, sourceSampleRef?: string): Promise<MalwareGraphAnalysis> => {
+    const form = new FormData();
+    form.append('file', file, file.name);
+    form.append('source_label', sourceLabel);
+    if (sourceSampleRef) form.append('source_sample_ref', sourceSampleRef);
+    return http.post(`/malwaregraph/analyses/${jobId}/inject-file`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data);
+  },
+};
+
+export interface SavedUnpackedLayer {
+  layer: number;
+  method: string;
+  filename: string;
+  saved_path: string;
+  size_bytes: number;
+  sha256: string;
+}
+
+// ── NVIDIA Sector Intelligence Packs ───────────────────────────────────────
+
+export interface SectorPack {
+  id: number;
+  sector_id: string;
+  sector_name: string;
+  sector_summary: string;
+  relevance_to_nvidia: string;
+  relevant_nvidia_products: string[];
+  crown_jewel_assets: string[];
+  likely_threat_actors: string[];
+  adversary_motivations: string[];
+  common_attack_surfaces: string[];
+  likely_attack_paths: string[];
+  intelligence_requirements: string[];
+  priority_intelligence_requirements: string[];
+  early_warning_indicators: string[];
+  relevant_ioc_types: string[];
+  relevant_ttp_categories: string[];
+  mitre_attack_focus: string[];
+  vulnerability_intelligence_focus: string[];
+  supply_chain_risk_focus: string[];
+  product_security_relevance: string;
+  telemetry_requirements: string[];
+  hunting_opportunities: string[];
+  detection_engineering_opportunities: string[];
+  mitigation_recommendations: string[];
+  engineering_follow_up_actions: string[];
+  psirt_relevance: string;
+  customer_risk_considerations: string[];
+  executive_summary_points: string[];
+  analyst_notes: string;
+  confidence_level: string;
+  source_requirements: string[];
+  pack_source: string;
+}
+
+export const sectorPacksApi = {
+  list: (params?: { pack_source?: string; confidence_level?: string }): Promise<SectorPack[]> => {
+    const query = new URLSearchParams();
+    if (params?.pack_source) query.set('pack_source', params.pack_source);
+    if (params?.confidence_level) query.set('confidence_level', params.confidence_level);
+    const qs = query.toString();
+    return http.get(`/sector/packs${qs ? `?${qs}` : ''}`).then(r => r.data);
+  },
+  get: (sectorId: string): Promise<SectorPack> =>
+    http.get(`/sector/packs/${sectorId}`).then(r => r.data),
+};
+
+// ── RetroHunt ─────────────────────────────────────────────────────────────────
+
+export interface RetroHuntSignal {
+  id: number;
+  source: string;
+  signal_type: string;
+  external_id: string;
+  title: string;
+  body: string;
+  url: string;
+  published_at: string | null;
+  severity: string;
+  cvss_score: number | null;
+  sector_tags: string[];
+  tech_tags: string[];
+  cve_ids: string[];
+  product_tags: string[];
+}
+
+export interface RetroHuntStats {
+  total: number;
+  by_source: Record<string, number>;
+  by_severity: Record<string, number>;
+  by_signal_type: Record<string, number>;
+  latest_published_at: string | null;
+}
+
+export interface RetroHuntCollectOut {
+  task_id: string;
+  status: string;
+}
+
+export interface RetroHuntTaskStatus {
+  task_id: string;
+  status: string;
+  result: { results: Array<{ source: string; inserted: number; skipped: number; errors: string[] }>; total_inserted: number } | null;
+}
+
+export const retroHuntApi = {
+  signals: (params?: {
+    q?: string;
+    source?: string;
+    signal_type?: string;
+    severity?: string;
+    sector?: string;
+    tech?: string;
+    cve?: string;
+    days?: number;
+    limit?: number;
+    offset?: number;
+  }): Promise<RetroHuntSignal[]> => {
+    const query = new URLSearchParams();
+    if (params?.q) query.set('q', params.q);
+    if (params?.source) query.set('source', params.source);
+    if (params?.signal_type) query.set('signal_type', params.signal_type);
+    if (params?.severity) query.set('severity', params.severity);
+    if (params?.sector) query.set('sector', params.sector);
+    if (params?.tech) query.set('tech', params.tech);
+    if (params?.cve) query.set('cve', params.cve);
+    if (params?.days) query.set('days', String(params.days));
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    return http.get(`/retrohunt/signals?${query}`).then(r => r.data);
+  },
+  stats: (days?: number): Promise<RetroHuntStats> =>
+    http.get(`/retrohunt/stats${days ? `?days=${days}` : ''}`).then(r => r.data),
+  collect: (days?: number): Promise<RetroHuntCollectOut> =>
+    http.post(`/retrohunt/collect${days ? `?days=${days}` : ''}`).then(r => r.data),
+  taskStatus: (taskId: string): Promise<RetroHuntTaskStatus> =>
+    http.get(`/retrohunt/collect/${taskId}`).then(r => r.data),
+};
+
+// ── Threat Hunting ────────────────────────────────────────────────────────────
+
+export type ThreatHuntStatus = 'queued' | 'draft' | 'planned' | 'running' | 'review' | 'completed' | 'cancelled' | 'archived';
+export type ThreatHuntPriority = 'P0 Emergency' | 'P1 High' | 'P2 Medium' | 'P3 Monitor' | 'P4 Low/Archive';
+export type ThreatHuntDisposition =
+  | 'undetermined'
+  | 'no_matches'
+  | 'benign'
+  | 'benign_policy_relevant'
+  | 'suspicious'
+  | 'confirmed_malicious'
+  | 'inconclusive'
+  | 'telemetry_gap'
+  | 'query_failure';
+export type ThreatHuntQueryLanguage = 'generic' | 'sigma' | 'kql' | 'spl' | 'eql' | 'lucene' | 'sql' | 'osquery' | 'yara' | 'yaral' | 'other';
+export type ThreatHuntTlp = 'TLP:CLEAR' | 'TLP:GREEN' | 'TLP:AMBER' | 'TLP:AMBER+STRICT' | 'TLP:RED';
+export type ThreatHuntFindingVerdict = 'supports' | 'refutes' | 'inconclusive' | 'benign';
+
+export interface ThreatHuntInput {
+  title: string;
+  hypothesis: string;
+  description: string;
+  scope: string;
+  status: ThreatHuntStatus;
+  priority: ThreatHuntPriority;
+  owner: string;
+  tlp: ThreatHuntTlp;
+  technique_ids: string[];
+  tactics: string[];
+  telemetry_sources: string[];
+  required_fields: string[];
+  tags: string[];
+  query_language: ThreatHuntQueryLanguage;
+  query_text: string;
+  time_range_start: string | null;
+  time_range_end: string | null;
+  expected_evidence: string;
+  false_positive_notes: string;
+  assumptions: string;
+  result_summary: string;
+  disposition: ThreatHuntDisposition;
+}
+
+export interface ThreatHunt extends ThreatHuntInput {
+  id: string;
+  case_id: string | null;
+  source_type: string;
+  source_ref: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+  archived_at: string | null;
+}
+
+export interface ThreatHuntFindingInput {
+  title: string;
+  summary: string;
+  severity: 'informational' | 'low' | 'medium' | 'high' | 'critical';
+  confidence: number;
+  status: 'new' | 'reviewed' | 'escalated' | 'closed';
+  verdict: ThreatHuntFindingVerdict;
+  tlp: ThreatHuntTlp;
+  evidence_type: string;
+  evidence_ref: string;
+  event_time: string | null;
+  observables: string[];
+  technique_ids: string[];
+  query_version_id?: string | null;
+  notes: string;
+}
+
+export interface ThreatHuntFinding extends ThreatHuntFindingInput {
+  id: string;
+  hunt_id: string;
+  analyst: string;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+}
+
+export interface ThreatHuntDetail extends ThreatHunt {
+  findings: ThreatHuntFinding[];
+  query_versions: ThreatHuntQueryVersion[];
+}
+
+export interface ThreatHuntQueryVersion {
+  id: string;
+  hunt_id: string;
+  version: number;
+  language: string;
+  query_text: string;
+  backend_assumptions: string;
+  checksum: string;
+  created_by: string;
+  created_at: string;
+}
+
+export interface ThreatHuntTemplate {
+  id: string;
+  title: string;
+  hypothesis: string;
+  description: string;
+  technique_ids: string[];
+  tactics: string[];
+  telemetry_sources: string[];
+  required_fields: string[];
+  query_language: string;
+  query_text: string;
+  query_note: string;
+  expected_evidence: string;
+  false_positive_notes: string;
+  tags: string[];
+}
+
+export interface ThreatHuntStats {
+  total_hunts: number;
+  active_hunts: number;
+  completed_hunts: number;
+  total_findings: number;
+  high_priority_findings: number;
+  by_status: Record<string, number>;
+  by_priority: Record<string, number>;
+}
+
+export type ThreatHuntAIProviderId = 'local' | 'claude' | 'openai' | 'gemini' | 'minimax';
+export type ThreatHuntAIStage = 'plan' | 'query' | 'findings' | 'outcome';
+
+export interface ThreatHuntAIProvider {
+  id: ThreatHuntAIProviderId;
+  label: string;
+  model: string;
+  /** Credentials or a private endpoint are present; this does not imply policy/runtime readiness. */
+  configured: boolean;
+  /** Provider is selectable under operator policy; the local provider also passed its runtime probe. */
+  available: boolean;
+  status: 'ready' | 'configured_and_permitted' | 'disabled_by_policy' | 'missing_credential' | 'missing_configuration' | 'invalid_endpoint' | 'runtime_check_required' | 'unreachable' | 'model_missing' | 'auth_error' | 'endpoint_error' | 'invalid_response';
+  reason: string;
+  remote: boolean;
+  requires_acknowledgement: boolean;
+  default: boolean;
+}
+
+export interface ThreatHuntAICitation {
+  source_session_id?: string | null;
+  source_type: 'report' | 'research' | 'hunt' | 'query_version' | 'finding' | string;
+  source_ref: string;
+  quote: string;
+  start: number | null;
+  end: number | null;
+  verified: boolean;
+}
+
+export interface ThreatHuntAIAssistRequest {
+  provider: ThreatHuntAIProviderId;
+  model?: string;
+  stage: ThreatHuntAIStage;
+  hunt_id?: string;
+  context: ThreatHuntInput;
+  target_query_language?: ThreatHuntQueryLanguage;
+  analyst_focus?: string;
+  cloud_processing_acknowledged: boolean;
+}
+
+export interface ThreatHuntAIAssistResponse {
+  assistance_id: string;
+  provider: ThreatHuntAIProviderId;
+  model: string;
+  stage: ThreatHuntAIStage;
+  lifecycle_status: 'suggested';
+  generated_at: string;
+  prompt_version: string;
+  summary: string;
+  recommended_actions: string[];
+  questions: string[];
+  evidence_gaps: string[];
+  cautions: string[];
+  suggested_patch: Partial<ThreatHuntInput>;
+  finding_drafts: Array<Partial<ThreatHuntFindingInput>>;
+  citations: ThreatHuntAICitation[];
+  warnings: string[];
+  requires_human_review: boolean;
+  execution_boundary: string;
+}
+
+export interface ThreatHuntAIHypothesisRequest {
+  provider: ThreatHuntAIProviderId;
+  model?: string;
+  source_session_id: string;
+  source_type: 'report' | 'research';
+  source_title?: string;
+  source_ref?: string;
+  tlp: ThreatHuntTlp;
+  analyst_focus?: string;
+  cloud_processing_acknowledged: boolean;
+}
+
+export interface ThreatHuntAIHypothesisCandidate {
+  title: string;
+  hypothesis: string;
+  description?: string;
+  scope?: string;
+  technique_ids?: string[];
+  tactics?: string[];
+  telemetry_sources?: string[];
+  required_fields?: string[];
+  tags?: string[];
+  query_language?: ThreatHuntQueryLanguage;
+  query_text?: string;
+  expected_evidence?: string;
+  false_positive_notes?: string;
+  assumptions?: string;
+  rationale: string;
+  source_evidence: ThreatHuntAICitation[];
+}
+
+export interface ThreatHuntAIHypothesisResponse {
+  assistance_id: string;
+  provider: ThreatHuntAIProviderId;
+  model: string;
+  lifecycle_status: 'suggested';
+  generated_at: string;
+  prompt_version: string;
+  source_session_id: string;
+  source_type: string;
+  source_title: string;
+  source_ref: string;
+  candidates: ThreatHuntAIHypothesisCandidate[];
+  warnings: string[];
+  requires_human_review: boolean;
+  execution_boundary: string;
+}
+
+export const threatHuntingApi = {
+  aiProviders: (): Promise<ThreatHuntAIProvider[]> =>
+    http.get('/threat-hunting/ai/providers', { skipGlobalError: true } as any).then(r => r.data),
+  assist: (body: ThreatHuntAIAssistRequest): Promise<ThreatHuntAIAssistResponse> =>
+    http.post('/threat-hunting/ai/assist', body, { skipGlobalError: true } as any).then(r => r.data),
+  generateHypotheses: (body: ThreatHuntAIHypothesisRequest): Promise<ThreatHuntAIHypothesisResponse> =>
+    http.post('/threat-hunting/ai/hypotheses', body, { skipGlobalError: true } as any).then(r => r.data),
+  templates: (): Promise<ThreatHuntTemplate[]> =>
+    http.get('/threat-hunting/templates').then(r => r.data),
+  stats: (): Promise<ThreatHuntStats> =>
+    http.get('/threat-hunting/stats').then(r => r.data),
+  hunts: (params?: { q?: string; status?: string; priority?: string; technique_id?: string }): Promise<ThreatHunt[]> => {
+    const query = new URLSearchParams();
+    if (params?.q) query.set('q', params.q);
+    if (params?.status) query.set('status', params.status);
+    if (params?.priority) query.set('priority', params.priority);
+    if (params?.technique_id) query.set('technique_id', params.technique_id);
+    const suffix = query.toString();
+    return http.get(`/threat-hunting/hunts${suffix ? `?${suffix}` : ''}`).then(r => r.data);
+  },
+  get: (huntId: string): Promise<ThreatHuntDetail> =>
+    http.get(`/threat-hunting/hunts/${huntId}`).then(r => r.data),
+  create: (body: ThreatHuntInput): Promise<ThreatHunt> =>
+    http.post('/threat-hunting/hunts', body).then(r => r.data),
+  update: (huntId: string, body: Partial<ThreatHuntInput>): Promise<ThreatHunt> =>
+    http.patch(`/threat-hunting/hunts/${huntId}`, body).then(r => r.data),
+  archive: (huntId: string): Promise<ThreatHunt> =>
+    http.post(`/threat-hunting/hunts/${huntId}/archive`).then(r => r.data),
+  findings: (huntId: string): Promise<ThreatHuntFinding[]> =>
+    http.get(`/threat-hunting/hunts/${huntId}/findings`).then(r => r.data),
+  createFinding: (huntId: string, body: ThreatHuntFindingInput): Promise<ThreatHuntFinding> =>
+    http.post(`/threat-hunting/hunts/${huntId}/findings`, body).then(r => r.data),
+  updateFinding: (huntId: string, findingId: string, body: Partial<ThreatHuntFindingInput>): Promise<ThreatHuntFinding> =>
+    http.patch(`/threat-hunting/hunts/${huntId}/findings/${findingId}`, body).then(r => r.data),
+  archiveFinding: (huntId: string, findingId: string): Promise<ThreatHuntFinding> =>
+    http.post(`/threat-hunting/hunts/${huntId}/findings/${findingId}/archive`).then(r => r.data),
+  exportUrl: (huntId: string) => `/api/threat-hunting/hunts/${huntId}/export`,
+};
+
+// ── Threat Hunting Query Library ─────────────────────────────────────────────
+export interface HuntQueryLibraryItem {
+  id: string;
+  stable_key: string;
+  title: string;
+  description: string;
+  language: ThreatHuntQueryLanguage;
+  query_text: string;
+  technique_ids: string[];
+  tactics: string[];
+  tags: string[];
+  data_sources: string[];
+  platforms: string[];
+  ioc_types: string[];
+  source_name: string;
+  source_url: string;
+  source_license: string;
+  source_rule_id: string;
+  quality_score: number;
+  validation: { valid?: boolean; errors?: string[]; warnings?: string[]; [key: string]: unknown };
+  community: boolean;
+  updated_at: string;
+  last_synced_at: string | null;
+}
+
+export interface HuntQueryLibraryFacets {
+  total: number;
+  languages: Array<{ value: string; count: number }>;
+  techniques: Array<{ value: string; count: number }>;
+  tags: Array<{ value: string; count: number }>;
+  sources: Array<{ value: string; count: number }>;
+  platforms: Array<{ value: string; count: number }>;
+  ioc_types: Array<{ value: string; count: number }>;
+}
+
+export interface IOCQueryBuildResult {
+  title: string;
+  description: string;
+  query_language: ThreatHuntQueryLanguage;
+  query_text: string;
+  technique_ids: string[];
+  tags: string[];
+  observables: Array<{ value: string; type: string }>;
+  warnings: string[];
+}
+
+export const queryLibraryApi = {
+  search: (params?: { q?: string; language?: string; technique?: string; tag?: string; source?: string; platform?: string; ioc_type?: string; limit?: number; offset?: number }): Promise<{ items: HuntQueryLibraryItem[]; total: number; limit: number; offset: number }> =>
+    http.get('/query-library', { params }).then(r => r.data),
+  get: (id: string): Promise<HuntQueryLibraryItem> =>
+    http.get('/query-library/' + id).then(r => r.data),
+  facets: (): Promise<HuntQueryLibraryFacets> =>
+    http.get('/query-library/facets').then(r => r.data),
+  autocomplete: (q: string): Promise<{ items: Array<{ type: string; value: string; label: string; count: number }> }> =>
+    http.get('/query-library/autocomplete', { params: { q } }).then(r => r.data),
+  buildFromIoc: (body: { ioc_ids?: number[]; observables?: Array<{ value: string; type?: string }>; language: ThreatHuntQueryLanguage; title: string; technique_ids?: string[] }): Promise<IOCQueryBuildResult> =>
+    http.post('/query-library/build-from-ioc', body).then(r => r.data),
+  sync: (): Promise<{ seen: number; created: number; updated: number }> =>
+    http.post('/query-library/sync').then(r => r.data),
+};
+
+// ── Knowledge Library ─────────────────────────────────────────────────────────
+
+export interface KnowledgeArticle {
+  id: number;
+  category: string;
+  external_id: string;
+  title: string;
+  summary: string;
+  tags: string[];
+  meta: Record<string, unknown>;
+  source_file: string;
+  published_at: string | null;
+}
+
+export interface KnowledgeArticleDetail extends KnowledgeArticle {
+  body: string;
+}
+
+export interface KnowledgeStats {
+  total: number;
+  by_category: Record<string, number>;
+}
+
+export const knowledgeApi = {
+  list: (params?: {
+    q?: string;
+    category?: string;
+    tag?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<KnowledgeArticle[]> => {
+    const query = new URLSearchParams();
+    if (params?.q) query.set('q', params.q);
+    if (params?.category) query.set('category', params.category);
+    if (params?.tag) query.set('tag', params.tag);
+    if (params?.limit) query.set('limit', String(params.limit));
+    if (params?.offset) query.set('offset', String(params.offset));
+    return http.get(`/knowledge/articles?${query}`).then(r => r.data);
+  },
+  get: (id: number): Promise<KnowledgeArticleDetail> =>
+    http.get(`/knowledge/articles/${id}`).then(r => r.data),
+  stats: (): Promise<KnowledgeStats> =>
+    http.get('/knowledge/stats').then(r => r.data),
+  seed: (): Promise<{ inserted: number; skipped: number; total: number }> =>
+    http.post('/knowledge/seed').then(r => r.data),
+};
+
+// ── Attack Simulation ──────────────────────────────────────────────────
+
+export interface AttackSimulationCatalogItem {
+  id: string;
+  technique_id: string;
+  name: string;
+  category: string;
+  risk_level: number;
+  target_types: string[];
+  description: string;
+  detection_brief?: {
+    technique_id: string;
+    title: string;
+    risk_level: number;
+    tags: string[];
+    adversary_activity: string;
+    production_log_sources: string;
+    detection_logic: string;
+    discriminators_tuning: string;
+  } | null;
+  expected_telemetry: string[];
+  safety_controls: string[];
+  steps: string[];
+  destructive: boolean;
+  emits_network_traffic: boolean;
+}
+
+export interface AttackSimulationTarget {
+  id: string;
+  name: string;
+  address: string;
+  target_type: string;
+  environment: string;
+  owner: string;
+  authorization: string;
+  allowed_categories: string[];
+  allowed_simulations: string[];
+  rate_limit: string;
+  allowed_hours: string;
+}
+
+export interface AttackSimulationPlan {
+  plan_id: string;
+  simulation: AttackSimulationCatalogItem;
+  target: AttackSimulationTarget;
+  allowed: boolean;
+  block_reasons: string[];
+  execution_mode: string;
+  safety_notice: string;
+  expected_telemetry: string[];
+  steps: string[];
+  approval_checklist: string[];
+}
+
+export interface AttackSimulationRun {
+  run_id: string;
+  status: string;
+  started_at: string;
+  ended_at: string;
+  plan: AttackSimulationPlan;
+  transcript: string[];
+  traffic_emitted: boolean;
+  result: string;
+  validation_status: string;
+  gaps: string[];
+  next_steps?: string[];
+  telemetry?: {
+    server?: {
+      url: string;
+      host: string;
+      port: number;
+      status: string;
+    };
+    log_file?: string;
+    web_access_log_file?: string;
+    web_server_access_log_file?: string;
+    web_security_log_file?: string;
+    web_error_log_file?: string;
+    web_auth_log_file?: string;
+    endpoint_log_file?: string;
+    request_count?: number;
+    success_count?: number;
+    events?: Array<{
+      timestamp: string;
+      event_type: string;
+      request_index: number;
+      method: string;
+      url: string;
+      path: string;
+      status: number;
+      ok: boolean;
+      duration_ms: number;
+      response_bytes: number;
+      error?: string;
+    }>;
+    summary?: Record<string, unknown>;
+  };
+}
+
+export interface AttackSimulationLogEvent {
+  timestamp?: string;
+  event_type?: string;
+  run_id?: string;
+  simulation_id?: string;
+  request_index?: string | number;
+  client_ip?: string;
+  method?: string;
+  path?: string;
+  url?: string;
+  status?: number;
+  duration_ms?: number;
+  response_bytes?: number;
+  raw_line?: string;
+  message?: string;
+  severity?: string;
+  matched_canaries?: string[];
+  headers?: Record<string, string>;
+  [key: string]: unknown;
+}
+
+export interface AttackSimulationLogs {
+  source: string;
+  run_id: string;
+  log_file: string;
+  exists: boolean;
+  line_count: number;
+  events: AttackSimulationLogEvent[];
+  returned_at: string;
+}
+
+export interface AttackSimulationForwardResult {
+  ok: boolean;
+  status: number;
+  destination_url: string;
+  connection_mode: 'auto' | 'direct' | 'docker_host';
+  source: string;
+  run_id: string;
+  event_count: number;
+  duration_ms: number;
+  http_fallback_used: boolean;
+  fallback_note: string;
+  payload_format: 'raw_lines' | 'per_event' | 'json_lines' | 'envelope';
+  sent_event_count: number;
+  error: string;
+  response_preview: string;
+  response_headers: Record<string, string>;
+}
+
+export interface AttackSimulationAiAssistantResult {
+  run_id: string;
+  mode: 'ttps' | 'actor' | 'challenge';
+  ai_provider: 'local' | 'claude' | 'openai' | 'gemini' | 'minimax';
+  ai_model: string;
+  ai_used: boolean;
+  ai_error: string;
+  ai_planner_summary: string;
+  scenario?: AttackSimulationAiAssistantScenario | null;
+  complicated_attack: boolean;
+  actor_profile: string;
+  technique_ids: string[];
+  attack_plan: {
+    summary: string;
+    mode: string;
+    ai_provider?: string;
+    complicated_attack?: boolean;
+    payload_style?: string;
+    actor_profile: string;
+    analyst_goal: string;
+    kill_chain: Array<{
+      step: number;
+      technique_id: string;
+      event_source: string;
+      event_id: string;
+      detection_goal: string;
+      focus: string[];
+      flow_stage?: string;
+      source_format?: string;
+      event_count?: number;
+    }>;
+    validation_note: string;
+  };
+  events: Array<Record<string, unknown>>;
+  delivery: AttackSimulationForwardResult;
+  log_file: string;
+}
+
+export interface AttackSimulationAttackFlow {
+  id: string;
+  run_id: string;
+  mode: 'ttps' | 'actor' | 'challenge';
+  ai_provider: 'local' | 'claude' | 'openai' | 'gemini' | 'minimax';
+  ai_model: string;
+  ai_used: boolean;
+  complicated_attack: boolean;
+  actor_profile: string;
+  scenario_id: string;
+  scenario_name: string;
+  summary: string;
+  technique_ids: string[];
+  event_count: number;
+  last_delivery_status: number;
+  last_delivery_ok: boolean;
+  last_delivery_error: string;
+  created_at: string;
+  updated_at: string;
+  attack_plan: AttackSimulationAiAssistantResult['attack_plan'];
+  events: Array<Record<string, unknown>>;
+  delivery: Record<string, unknown>;
+}
+
+export interface AttackSimulationAiAssistantScenario {
+  id: string;
+  name: string;
+  difficulty: string;
+  description: string;
+  technique_ids: string[];
+  preconditions: string[];
+  success_criteria: string[];
+  telemetry_sources: string[];
+  expected_detections: string[];
+  tags: string[];
+}
+
+export type AttackSimulationLogSource = 'attacked_server' | 'web' | 'run' | 'access' | 'security' | 'error' | 'auth' | 'endpoint';
+
+export interface AttackSimulationSiemDestination {
+  id: string;
+  destination_url: string;
+  auth_type: 'none' | 'bearer' | 'token' | 'basic' | 'custom_header';
+  username: string;
+  header_name: string;
+  connection_mode: 'auto' | 'direct' | 'docker_host';
+  allow_http_fallback: boolean;
+  payload_format: 'raw_lines' | 'per_event' | 'json_lines' | 'envelope';
+  source: AttackSimulationLogSource;
+  last_status: number;
+  last_ok: boolean;
+  last_event_count: number;
+  last_error: string;
+  updated_at: string;
+}
+
+export interface AttackSimulationManualResult {
+  result_id: string;
+  created_at: string;
+  plan: AttackSimulationPlan;
+  detection_result: string;
+  validation_status: string;
+  evidence: string;
+  gaps: string[];
+  traffic_emitted_by_platform: boolean;
+  note: string;
+}
+
+export const simulationApi = {
+  catalog: (): Promise<AttackSimulationCatalogItem[]> =>
+    http.get('/simulation/catalog').then(r => r.data),
+  targets: (): Promise<AttackSimulationTarget[]> =>
+    http.get('/simulation/targets').then(r => r.data),
+  aiAssistantScenarios: (): Promise<AttackSimulationAiAssistantScenario[]> =>
+    http.get('/simulation/ai-assistant/scenarios').then(r => r.data),
+  plan: (payload: { simulation_id: string; target_id: string; analyst_note?: string }): Promise<AttackSimulationPlan> =>
+    http.post('/simulation/plan', payload).then(r => r.data),
+  run: (payload: { simulation_id: string; target_id: string; analyst_note?: string }): Promise<AttackSimulationRun> =>
+    http.post('/simulation/run', payload).then(r => r.data),
+  logs: (params: { source?: AttackSimulationLogSource; run_id?: string; limit?: number }): Promise<AttackSimulationLogs> =>
+    http.get('/simulation/logs', { params }).then(r => r.data),
+  attackFlows: (): Promise<AttackSimulationAttackFlow[]> =>
+    http.get('/simulation/attack-flows').then(r => r.data),
+  resendAttackFlow: (flowId: string, payload: {
+    destination_url: string;
+    auth_type?: 'none' | 'bearer' | 'token' | 'basic' | 'custom_header';
+    username?: string;
+    password?: string;
+    token?: string;
+    header_name?: string;
+    connection_mode?: 'auto' | 'direct' | 'docker_host';
+    allow_http_fallback?: boolean;
+    payload_format?: 'raw_lines' | 'per_event' | 'json_lines' | 'envelope';
+  }): Promise<{ flow: AttackSimulationAttackFlow; delivery: AttackSimulationForwardResult }> =>
+    http.post(`/simulation/attack-flows/${flowId}/resend`, payload).then(r => r.data),
+  siemDestinations: (): Promise<AttackSimulationSiemDestination[]> =>
+    http.get('/simulation/siem-destinations').then(r => r.data),
+  saveSiemDestination: (payload: {
+    destination_url: string;
+    auth_type?: 'none' | 'bearer' | 'token' | 'basic' | 'custom_header';
+    username?: string;
+    header_name?: string;
+    connection_mode?: 'auto' | 'direct' | 'docker_host';
+    allow_http_fallback?: boolean;
+    payload_format?: 'raw_lines' | 'per_event' | 'json_lines' | 'envelope';
+    source?: AttackSimulationLogSource;
+  }): Promise<AttackSimulationSiemDestination> =>
+    http.post('/simulation/siem-destinations', payload).then(r => r.data),
+  clearSiemDestinations: (): Promise<{ deleted: number }> =>
+    http.delete('/simulation/siem-destinations').then(r => r.data),
+  forwardLogs: (payload: {
+    source: AttackSimulationLogSource;
+    run_id?: string;
+    destination_url: string;
+    limit?: number;
+    auth_type?: 'none' | 'bearer' | 'token' | 'basic' | 'custom_header';
+    username?: string;
+    password?: string;
+    token?: string;
+    header_name?: string;
+    connection_mode?: 'auto' | 'direct' | 'docker_host';
+    allow_http_fallback?: boolean;
+    payload_format?: 'raw_lines' | 'per_event' | 'json_lines' | 'envelope';
+  }): Promise<AttackSimulationForwardResult> =>
+    http.post('/simulation/forward-logs', payload).then(r => r.data),
+  aiAssistantTelemetry: (payload: {
+    mode: 'ttps' | 'actor' | 'challenge';
+    ai_provider?: 'local' | 'claude' | 'openai' | 'gemini' | 'minimax';
+    complicated_attack?: boolean;
+    scenario_id?: string;
+    technique_ids?: string[];
+    actor_profile?: string;
+    analyst_goal?: string;
+    destination_url: string;
+    auth_type?: 'none' | 'bearer' | 'token' | 'basic' | 'custom_header';
+    username?: string;
+    password?: string;
+    token?: string;
+    header_name?: string;
+    connection_mode?: 'auto' | 'direct' | 'docker_host';
+    allow_http_fallback?: boolean;
+    payload_format?: 'raw_lines' | 'per_event' | 'json_lines' | 'envelope';
+  }): Promise<AttackSimulationAiAssistantResult> =>
+    http.post('/simulation/ai-assistant/telemetry', payload).then(r => r.data),
+  manualResult: (payload: {
+    simulation_id: string;
+    target_id: string;
+    detection_result: 'passed' | 'failed' | 'partial' | 'not_proven';
+    evidence: string;
+    gaps: string[];
+  }): Promise<AttackSimulationManualResult> =>
+    http.post('/simulation/manual-result', payload).then(r => r.data),
+};
+
+export type EvidenceGraphNodeType =
+  | 'evidence'
+  | 'claim'
+  | 'behavior'
+  | 'attack_technique'
+  | 'required_telemetry'
+  | 'detection_candidate'
+  | 'detection_rule'
+  | 'validation_scenario'
+  | 'siem_result'
+  | 'analyst_decision';
+
+export interface EvidenceGraphNode {
+  id: string;
+  node_type: EvidenceGraphNodeType;
+  title: string;
+  description: string;
+  source_type: string;
+  source_ref: string;
+  raw_excerpt: string;
+  normalized_summary: string;
+  statement: string;
+  claim_type: string;
+  behavior_description: string;
+  framework: string;
+  technique_id: string;
+  technique_name: string;
+  tactic: string;
+  mapping_rationale: string;
+  data_source: string;
+  data_component: string;
+  required_fields: unknown[];
+  example_sources: unknown[];
+  availability_status: string;
+  gap_description: string;
+  detection_hypothesis: string;
+  detection_type: string;
+  severity: string;
+  status: string;
+  rule_format: string;
+  rule_body: string;
+  test_status: string;
+  deployment_status: string;
+  scenario_type: string;
+  forwarding_status: string;
+  detection_matched: boolean;
+  decision: string;
+  rationale: string;
+  confidence: number;
+  review_status: string;
+  ai_generated: boolean;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EvidenceGraphEdge {
+  id: string;
+  source_node_id: string;
+  target_node_id: string;
+  edge_type: string;
+  rationale: string;
+  confidence: number;
+  review_status: string;
+  ai_generated: boolean;
+  metadata_json: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface EvidenceGraphSummary {
+  node_counts: Record<string, number>;
+  edge_counts: Record<string, number>;
+  detection_readiness_score: number;
+  unresolved_gaps: number;
+  unreviewed_ai_suggestions: number;
+  validation_coverage: { validation_scenarios: number; siem_results: number; coverage_percent: number };
+  top_techniques_by_detection_gap: Array<{ technique: string; name: string; gap_count: number }>;
+  latest_analyst_decisions: EvidenceGraphNode[];
+}
+
+export interface EvidenceGraphQuery {
+  nodes: EvidenceGraphNode[];
+  edges: EvidenceGraphEdge[];
+  grouped_paths: Array<{ label: string; steps: EvidenceGraphNode[]; edge_count: number }>;
+  warnings: string[];
+}
+
+export interface EvidenceGraphGap {
+  technique: string;
+  evidence: string;
+  missing_step: string;
+  required_telemetry: string;
+  detection_candidate: string;
+  rule_status: string;
+  validation_status: string;
+  analyst_decision: string;
+  recommended_next_action: string;
+  node_id?: string;
+}
+
+export const evidenceGraphApi = {
+  summary: (): Promise<EvidenceGraphSummary> => http.get('/evidence-graph/summary').then(r => r.data),
+  query: (params?: {
+    node_type?: string;
+    technique_id?: string;
+    review_status?: string;
+    validation_status?: string;
+    search?: string;
+    include_ai_suggestions?: boolean;
+    include_rejected?: boolean;
+    max_depth?: number;
+  }): Promise<EvidenceGraphQuery> => http.get('/evidence-graph', { params }).then(r => r.data),
+  gaps: (): Promise<{ gaps: EvidenceGraphGap[] }> => http.get('/evidence-graph/gaps').then(r => r.data),
+  paths: (params?: { from_node_id?: string; to_node_type?: string; technique_id?: string; max_depth?: number }): Promise<{ paths: EvidenceGraphNode[][]; warnings: string[] }> =>
+    http.get('/evidence-graph/paths', { params }).then(r => r.data),
+  createNode: (body: Partial<EvidenceGraphNode> & { node_type: string; title: string }): Promise<EvidenceGraphNode> =>
+    http.post('/evidence-graph/nodes', body).then(r => r.data),
+  updateNode: (id: string, body: Partial<EvidenceGraphNode>): Promise<EvidenceGraphNode> =>
+    http.patch(`/evidence-graph/nodes/${id}`, body).then(r => r.data),
+  createEdge: (body: { source_node_id: string; target_node_id: string; edge_type: string; rationale?: string; confidence?: number; review_status?: string; ai_generated?: boolean; metadata_json?: Record<string, unknown> }): Promise<EvidenceGraphEdge> =>
+    http.post('/evidence-graph/edges', body).then(r => r.data),
+  updateEdge: (id: string, body: Partial<EvidenceGraphEdge>): Promise<EvidenceGraphEdge> =>
+    http.patch(`/evidence-graph/edges/${id}`, body).then(r => r.data),
+  fromReport: (reportId: string): Promise<Record<string, unknown>> => http.post(`/evidence-graph/from-report/${reportId}`).then(r => r.data),
+  fromSimulation: (runId: string): Promise<Record<string, unknown>> => http.post(`/evidence-graph/from-simulation/${runId}`).then(r => r.data),
+  fromIoc: (iocId: string): Promise<Record<string, unknown>> => http.post(`/evidence-graph/from-ioc/${iocId}`).then(r => r.data),
+  fromAsset: (assetId: string): Promise<Record<string, unknown>> => http.post(`/evidence-graph/from-asset/${assetId}`).then(r => r.data),
+  exportUrl: (format: 'json' | 'markdown' | 'csv' | 'evidence-pack') => `/api/evidence-graph/export?fmt=${encodeURIComponent(format)}`,
+};
+
+// ── Threat Radar ─────────────────────────────────────────────────────────────
+
+export type ThreatSignalType =
+  | 'cve_disclosure'
+  | 'cisa_kev_active_exploitation'
+  | 'public_poc'
+  | 'zero_day_claim'
+  | 'exploit_sale_claim'
+  | 'darknet_provider_mention'
+  | 'marketplace_hardware_listing'
+  | 'firmware_dump_claim'
+  | 'source_code_leak_claim'
+  | 'credential_exposure'
+  | 'supplier_breach'
+  | 'malicious_package'
+  | 'critical_dependency_vulnerability'
+  | 'customer_report'
+  | 'internal_telemetry_anomaly';
+
+export interface ThreatRadarScore {
+  score: number;
+  priority: string;
+  factors: Record<string, number>;
+  rationale: string[];
+}
+
+export interface ThreatRadarActionRecommendation {
+  type: string;
+  title: string;
+  owner_team: string;
+  description: string;
+}
+
+export interface ThreatRadarProductMapping {
+  id?: string;
+  signal_id?: string | null;
+  case_id?: string | null;
+  product: string;
+  component?: string;
+  dependency?: string;
+  version?: string;
+  exposure?: string;
+  environment?: string;
+  relevance?: number;
+  blast_radius?: number;
+  evidence?: string;
+  tags?: string[];
+  technique_ids?: string[];
+  created_at?: string;
+}
+
+export interface ThreatRadarSignal {
+  id: string;
+  title: string;
+  signal_type: ThreatSignalType;
+  description: string;
+  status: string;
+  source_id?: string | null;
+  source_name: string;
+  source_url: string;
+  tlp: string;
+  legal_sensitive: boolean;
+  confidence: number;
+  severity: string;
+  cve_ids: string[];
+  technique_ids: string[];
+  iocs: Array<Record<string, unknown>>;
+  actors: string[];
+  sectors: string[];
+  tags: string[];
+  raw_metadata: Record<string, unknown>;
+  created_by: string;
+  created_at?: string;
+  updated_at?: string;
+  score?: ThreatRadarScore;
+  product_mappings: ThreatRadarProductMapping[];
+  recommended_actions: ThreatRadarActionRecommendation[];
+}
+
+export interface ThreatRadarCase {
+  id: string;
+  signal_id?: string | null;
+  title: string;
+  summary: string;
+  status: string;
+  priority: string;
+  risk_score: number;
+  tlp: string;
+  legal_sensitive: boolean;
+  recommended_actions: ThreatRadarActionRecommendation[];
+  product_context: ThreatRadarProductMapping[];
+  tags: string[];
+  created_by: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ThreatRadarSource {
+  id: string;
+  name: string;
+  source_type: string;
+  url: string;
+  reliability: number;
+  tlp: string;
+  legal_sensitive: boolean;
+  enabled: boolean;
+  notes: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ThreatRadarReport {
+  id: string;
+  case_id: string;
+  report_type: string;
+  title: string;
+  markdown: string;
+  metadata: Record<string, unknown>;
+  created_by: string;
+  created_at?: string;
+}
+
+export interface ThreatRadarCreateSignal {
+  title: string;
+  signal_type: ThreatSignalType;
+  description?: string;
+  source_name?: string;
+  source_url?: string;
+  source?: Partial<ThreatRadarSource> & { name: string };
+  tlp?: string;
+  legal_sensitive?: boolean;
+  confidence?: number;
+  severity?: string;
+  cve_ids?: string[];
+  technique_ids?: string[];
+  iocs?: Array<Record<string, unknown>>;
+  actors?: string[];
+  sectors?: string[];
+  tags?: string[];
+  raw_metadata?: Record<string, unknown>;
+  evidence?: Array<{ evidence_type?: string; title?: string; summary?: string; url?: string; tlp?: string; legal_sensitive?: boolean; metadata?: Record<string, unknown> }>;
+  claims?: Array<{ claim_type?: string; statement?: string; credibility?: number; status?: string; tlp?: string; legal_sensitive?: boolean }>;
+  product_mappings?: ThreatRadarProductMapping[];
+  create_case?: boolean;
+}
+
+export interface ThreatExposureProvider {
+  id: string;
+  label: string;
+  category: string;
+  source_type: string;
+  purpose: string;
+  env_var: string;
+  configured: boolean;
+  requires_key: boolean;
+  enabled: boolean;
+  legal_sensitive: boolean;
+  status: string;
+}
+
+export interface ThreatExposureHit {
+  provider: string;
+  provider_label?: string;
+  source_type?: string;
+  title: string;
+  summary?: string;
+  url?: string;
+  observed_at?: string;
+  product?: string;
+  component?: string;
+  supplier?: string;
+  version?: string;
+  exposure?: string;
+  environment?: string;
+  ecosystem?: string;
+  handle?: string;
+  price?: string;
+  currency?: string;
+  confidence?: number;
+  severity?: string;
+  cve_ids?: string[];
+  technique_ids?: string[];
+  iocs?: Array<Record<string, unknown>>;
+  actors?: string[];
+  sectors?: string[];
+  affected_versions?: string[];
+  sbom_match?: boolean;
+  legal_sensitive?: boolean | null;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ThreatExposureWatchTerm {
+  value: string;
+  type?: string;
+  products?: string[];
+  components?: string[];
+  criticality?: string;
+  tags?: string[];
+}
+
+export interface ThreatCompanySpace {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  owner: string;
+  sector: string;
+  region: string;
+  tags: string[];
+  settings: Record<string, unknown>;
+  counts: Record<string, number>;
+  created_by: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ThreatSpaceAsset {
+  id: string;
+  space_id: string;
+  asset_id: string;
+  name: string;
+  asset_type: string;
+  environment: string;
+  owner: string;
+  criticality: string;
+  exposure: string;
+  products: string[];
+  components: string[];
+  technologies: string[];
+  ip_addresses: string[];
+  domains: string[];
+  tags: string[];
+  metadata: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ThreatSpaceDashboard {
+  id: string;
+  space_id: string;
+  name: string;
+  dashboard_type: string;
+  layout: Record<string, unknown>;
+  widgets: Array<Record<string, unknown>>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ThreatDashboardMetric {
+  label: string;
+  value: number;
+}
+
+export interface ThreatDashboardPoint {
+  label: string;
+  value: number;
+}
+
+export interface ThreatDashboardWidget {
+  id: string;
+  title: string;
+  kind: string;
+  source?: string;
+  metrics?: ThreatDashboardMetric[];
+  points?: ThreatDashboardPoint[];
+  rows?: Array<Record<string, unknown>>;
+}
+
+export interface ThreatSpaceMonitor {
+  id: string;
+  space_id: string;
+  name: string;
+  monitor_type: string;
+  cadence: string;
+  enabled: boolean;
+  query: Record<string, unknown>;
+  alert_threshold: number;
+  last_status: string;
+  last_result: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ThreatSpaceAIStep {
+  id: string;
+  space_id: string;
+  step: string;
+  title: string;
+  guidance: string;
+  checklist: string[];
+  created_by: string;
+  created_at?: string;
+}
+
+export interface ThreatAssetScanProviderCatalog {
+  enabled: boolean;
+  nmap: {
+    enabled: boolean;
+    profile: string;
+    top_ports: number;
+    timeout_seconds: number;
+    permission: string;
+    boundary: string;
+  };
+  web: {
+    enabled: boolean;
+    profile: string;
+    timeout_seconds: number;
+    permission: string;
+    boundary: string;
+  };
+  passive: Array<{
+    id: string;
+    label: string;
+    configured: boolean;
+    enabled: boolean;
+    mode: string;
+  }>;
+  ai: ThreatHuntAIProvider[];
+}
+
+export interface ThreatAssetScan {
+  id: string;
+  space_id: string;
+  asset_id: string;
+  target: string;
+  target_host: string;
+  target_type: 'ip' | 'domain' | 'url';
+  status: 'running' | 'completed' | 'partial' | 'failed';
+  scan_profile: string;
+  requested_providers: string[];
+  passive_results: Array<Record<string, unknown>>;
+  nmap_requested: boolean;
+  nmap_result: Record<string, unknown>;
+  web_probe_requested: boolean;
+  web_probe_result: Record<string, unknown> & {
+    status?: string;
+    summary?: string;
+    profile?: string;
+    probes?: Array<Record<string, unknown>>;
+    findings?: Array<Record<string, unknown>>;
+  };
+  inventory_update: {
+    requested?: boolean;
+    changed?: boolean;
+    observed_count?: number;
+    added?: {
+      ip_addresses?: string[];
+      domains?: string[];
+      ports?: number[];
+      technologies?: string[];
+      cpes?: string[];
+    };
+    updated_at?: string;
+  };
+  findings: Array<{
+    category?: string;
+    severity?: string;
+    title?: string;
+    evidence?: string;
+    source?: string;
+    status?: string;
+    verification_required?: boolean;
+    recommendation?: string;
+  }>;
+  ai_requested: boolean;
+  ai_provider: string;
+  ai_model: string;
+  ai_analysis: Record<string, unknown> & {
+    summary?: string;
+    risk_level?: string;
+    observations?: string[];
+    recommended_actions?: string[];
+    caveats?: string[];
+    requires_human_review?: boolean;
+    evidence_boundary?: string;
+    resolved_ips?: string[];
+    cve_candidates?: Array<Record<string, unknown>>;
+  };
+  authorization_confirmed: boolean;
+  warnings: string[];
+  error: string;
+  requested_by: string;
+  started_at?: string;
+  completed_at?: string | null;
+  created_at?: string;
+}
+
+export interface ThreatAssetIntelligenceEvidence {
+  kind: string;
+  label: string;
+  source: string;
+  source_url?: string;
+  signal_id?: string;
+  scan_id?: string;
+  confidence?: number;
+  evidence?: string;
+  matched_cpe?: string;
+}
+
+export interface ThreatAssetIntelligence {
+  space: { id: string; name: string; slug: string };
+  asset: ThreatSpaceAsset;
+  summary: {
+    risk_score: number;
+    risk_level: string;
+    alerts: number;
+    cves: number;
+    known_exploited_cves: number;
+    ttps: number;
+    iocs: number;
+    direct_ioc_matches: number;
+    assessments: number;
+    latest_open_services: number;
+    last_assessed_at?: string | null;
+  };
+  cves: Array<{
+    cve_id: string;
+    description: string;
+    severity: string;
+    score: string;
+    known_exploited: boolean;
+    published?: string | null;
+    last_modified?: string | null;
+    references: unknown[];
+    status: string;
+    evidence_level: string;
+    evidence: ThreatAssetIntelligenceEvidence[];
+    verification_required: boolean;
+  }>;
+  ttps: Array<{
+    attack_id: string;
+    name: string;
+    description: string;
+    url: string;
+    platforms: string[];
+    data_sources: string[];
+    evidence_level: string;
+    evidence: ThreatAssetIntelligenceEvidence[];
+    verification_required: boolean;
+  }>;
+  iocs: Array<{
+    id: string;
+    value: string;
+    indicator_type: string;
+    source_id: string;
+    source_url: string;
+    confidence: number;
+    last_seen: string;
+    malware_family: string;
+    campaign: string;
+    technique_ids: string[];
+    status: string;
+    evidence_level: string;
+    matched_on: string[];
+    verification_required: boolean;
+    note: string;
+  }>;
+  alerts: Array<Record<string, unknown>>;
+  recent_scans: Array<{
+    id: string;
+    target: string;
+    status: string;
+    scan_profile: string;
+    nmap_requested: boolean;
+    open_port_count: number;
+    finding_count: number;
+    ai_requested: boolean;
+    ai_provider: string;
+    risk_level: string;
+    requested_by: string;
+    completed_at?: string | null;
+    created_at?: string;
+  }>;
+  evidence_boundary: string;
+  generated_at: string;
+}
+
+export interface ThreatAssetList {
+  space: { id: string; name: string; slug: string };
+  items: ThreatSpaceAsset[];
+  total: number;
+  limit: number;
+  offset: number;
+  filters: {
+    q: string;
+    asset_type: string;
+    environment: string;
+    criticality: string;
+    exposure: string;
+  };
+}
+
+export interface ThreatMonitorSearchResult {
+  query: string;
+  total: number;
+  matched: number;
+  group_by: string;
+  points: ThreatDashboardPoint[];
+  rows: Array<Record<string, unknown>>;
+  errors: string[];
+}
+
+export interface ThreatCompanySpaceDetail {
+  space: ThreatCompanySpace;
+  assets: ThreatSpaceAsset[];
+  dashboards: ThreatSpaceDashboard[];
+  monitors: ThreatSpaceMonitor[];
+  ai_steps: ThreatSpaceAIStep[];
+}
+
+export const threatRadarApi = {
+  spaces: (): Promise<ThreatCompanySpace[]> => http.get('/threat-radar/spaces').then(r => r.data),
+  spaceMetrics: (): Promise<Record<string, number>> => http.get('/threat-radar/spaces/metrics').then(r => r.data),
+  createSpace: (body: Partial<ThreatCompanySpace> & { name: string }): Promise<ThreatCompanySpace> =>
+    http.post('/threat-radar/spaces', body).then(r => r.data),
+  spaceDetail: (id: string): Promise<ThreatCompanySpaceDetail> => http.get(`/threat-radar/spaces/${id}`).then(r => r.data),
+  createSpaceAsset: (spaceId: string, body: Partial<ThreatSpaceAsset> & { name: string }): Promise<ThreatSpaceAsset> =>
+    http.post(`/threat-radar/spaces/${spaceId}/assets`, body).then(r => r.data),
+  updateSpaceAsset: (spaceId: string, assetId: string, body: Partial<ThreatSpaceAsset> & { name: string }): Promise<ThreatSpaceAsset> =>
+    http.put(`/threat-radar/spaces/${spaceId}/assets/${assetId}`, body).then(r => r.data),
+  spaceAssets: (
+    spaceId: string,
+    params?: {
+      q?: string;
+      asset_type?: string;
+      environment?: string;
+      criticality?: string;
+      exposure?: string;
+      limit?: number;
+      offset?: number;
+    },
+  ): Promise<ThreatAssetList> =>
+    http.get(`/threat-radar/spaces/${spaceId}/assets`, { params }).then(r => r.data),
+  assetIntelligence: (spaceId: string, assetId: string): Promise<ThreatAssetIntelligence> =>
+    http.get(`/threat-radar/spaces/${spaceId}/assets/${assetId}/intelligence`).then(r => r.data),
+  assetScannerProviders: (): Promise<ThreatAssetScanProviderCatalog> =>
+    http.get('/threat-radar/asset-scanner/providers').then(r => r.data),
+  assetScans: (spaceId: string, assetId: string, limit = 25): Promise<ThreatAssetScan[]> =>
+    http.get(`/threat-radar/spaces/${spaceId}/assets/${assetId}/scans`, { params: { limit } }).then(r => r.data),
+  assetScan: (spaceId: string, assetId: string, scanId: string): Promise<ThreatAssetScan> =>
+    http.get(`/threat-radar/spaces/${spaceId}/assets/${assetId}/scans/${scanId}`).then(r => r.data),
+  createAssetScan: (
+    spaceId: string,
+    assetId: string,
+    body: {
+      target: string;
+      providers?: string[];
+      run_nmap?: boolean;
+      run_web_probe?: boolean;
+      update_inventory?: boolean;
+      ai_analyze?: boolean;
+      ai_provider?: ThreatHuntAIProviderId;
+      ai_model?: string;
+      cloud_processing_acknowledged?: boolean;
+      authorization_confirmed: boolean;
+      tlp?: ThreatHuntTlp;
+    },
+  ): Promise<ThreatAssetScan> =>
+    http.post(`/threat-radar/spaces/${spaceId}/assets/${assetId}/scans`, body, { skipGlobalError: true } as any).then(r => r.data),
+  createSpaceDashboard: (spaceId: string, body: Partial<ThreatSpaceDashboard>): Promise<ThreatSpaceDashboard> =>
+    http.post(`/threat-radar/spaces/${spaceId}/dashboards`, body).then(r => r.data),
+  generateSpaceDashboard: (spaceId: string): Promise<ThreatSpaceDashboard> =>
+    http.post(`/threat-radar/spaces/${spaceId}/dashboards/generate`).then(r => r.data),
+  createSpaceMonitor: (spaceId: string, body: Partial<ThreatSpaceMonitor> & { name: string }): Promise<ThreatSpaceMonitor> =>
+    http.post(`/threat-radar/spaces/${spaceId}/monitors`, body).then(r => r.data),
+  runSpaceMonitor: (spaceId: string, monitorId: string): Promise<ThreatSpaceMonitor> =>
+    http.post(`/threat-radar/spaces/${spaceId}/monitors/${monitorId}/run`).then(r => r.data),
+  searchSpace: (spaceId: string, body: { query: string; timerange?: string; limit?: number }): Promise<ThreatMonitorSearchResult> =>
+    http.post(`/threat-radar/spaces/${spaceId}/search`, body).then(r => r.data),
+  alerts: (spaceId: string, params?: { status?: string; limit?: number }): Promise<Array<Record<string, unknown>>> =>
+    http.get(`/threat-radar/spaces/${spaceId}/alerts`, { params }).then(r => r.data),
+  updateAlertStatus: (spaceId: string, alertId: string, body: { status: string; assignee?: string; case_id?: string | null }): Promise<Record<string, unknown>> =>
+    http.post(`/threat-radar/spaces/${spaceId}/alerts/${alertId}/status`, body).then(r => r.data),
+  spaceAiAssistant: (spaceId: string, body: { step: string; context?: Record<string, unknown> }): Promise<ThreatSpaceAIStep> =>
+    http.post(`/threat-radar/spaces/${spaceId}/ai-assistant`, body).then(r => r.data),
+  sources: (): Promise<ThreatRadarSource[]> => http.get('/threat-radar/sources').then(r => r.data),
+  createSource: (body: Partial<ThreatRadarSource> & { name: string }): Promise<ThreatRadarSource> =>
+    http.post('/threat-radar/sources', body).then(r => r.data),
+  signals: (params?: { signal_type?: string; status?: string; q?: string; limit?: number; offset?: number }): Promise<ThreatRadarSignal[]> =>
+    http.get('/threat-radar/signals', { params }).then(r => r.data),
+  createSignal: (body: ThreatRadarCreateSignal): Promise<{ signal: ThreatRadarSignal; case: ThreatRadarCase | null; score: ThreatRadarScore }> =>
+    http.post('/threat-radar/signals', body).then(r => r.data),
+  signal: (id: string): Promise<ThreatRadarSignal> => http.get(`/threat-radar/signals/${id}`).then(r => r.data),
+  triageSignal: (id: string, body: { status?: string; confidence?: number; severity?: string; product_mappings?: ThreatRadarProductMapping[]; create_case?: boolean; analyst_notes?: string }): Promise<{ signal: ThreatRadarSignal; case: ThreatRadarCase | null }> =>
+    http.post(`/threat-radar/signals/${id}/triage`, body).then(r => r.data),
+  cases: (params?: { status?: string; priority?: string; limit?: number; offset?: number }): Promise<ThreatRadarCase[]> =>
+    http.get('/threat-radar/cases', { params }).then(r => r.data),
+  caseDetail: (id: string): Promise<{ case: ThreatRadarCase; actions: Array<Record<string, unknown>>; reports: ThreatRadarReport[] }> =>
+    http.get(`/threat-radar/cases/${id}`).then(r => r.data),
+  caseGraph: (id: string): Promise<{ nodes: Array<Record<string, unknown>>; edges: Array<Record<string, unknown>> }> =>
+    http.get(`/threat-radar/cases/${id}/graph`).then(r => r.data),
+  scoreCase: (id: string): Promise<ThreatRadarScore & { recommended_actions: ThreatRadarActionRecommendation[] }> =>
+    http.post(`/threat-radar/cases/${id}/score`).then(r => r.data),
+  escalateCase: (id: string): Promise<{ case: ThreatRadarCase; ir_escalation: Record<string, unknown> }> =>
+    http.post(`/threat-radar/cases/${id}/escalate`).then(r => r.data),
+  productMap: (body: { signal_id?: string; case_id?: string; mappings: ThreatRadarProductMapping[] }): Promise<ThreatRadarProductMapping[]> =>
+    http.post('/threat-radar/product-map', body).then(r => r.data),
+  productExposure: (): Promise<ThreatRadarProductMapping[]> => http.get('/threat-radar/product-exposure').then(r => r.data),
+  exposureProviders: (): Promise<ThreatExposureProvider[]> => http.get('/threat-radar/exposure/providers').then(r => r.data),
+  exposurePlan: (body: { providers?: string[]; watch_terms?: ThreatExposureWatchTerm[] }): Promise<Record<string, unknown>> =>
+    http.post('/threat-radar/exposure/plan', body).then(r => r.data),
+  classifyExposure: (body: ThreatExposureHit): Promise<Record<string, unknown>> =>
+    http.post('/threat-radar/exposure/classify', body).then(r => r.data),
+  ingestExposure: (body: ThreatExposureHit): Promise<Record<string, unknown>> =>
+    http.post('/threat-radar/exposure/ingest', body).then(r => r.data),
+  createHunt: (caseId: string): Promise<Record<string, unknown>> => http.post(`/threat-radar/cases/${caseId}/create-hunt`).then(r => r.data),
+  createPsirtTask: (caseId: string): Promise<Record<string, unknown>> => http.post(`/threat-radar/cases/${caseId}/create-psirt-task`).then(r => r.data),
+  createIrEscalation: (caseId: string): Promise<Record<string, unknown>> => http.post(`/threat-radar/cases/${caseId}/create-ir-escalation`).then(r => r.data),
+  createDetectionRequirement: (caseId: string): Promise<Record<string, unknown>> => http.post(`/threat-radar/cases/${caseId}/create-detection-requirement`).then(r => r.data),
+  generateReport: (caseId: string, report_type: 'flash_note' | 'product_impact' | 'hunt_pack' | 'psirt_appendix' | 'executive_summary'): Promise<ThreatRadarReport> =>
+    http.post(`/threat-radar/cases/${caseId}/generate-report`, { report_type }).then(r => r.data),
+  watchlist: (watchlist: 'cve' | 'zero-day' | 'supply-chain' | 'hardware'): Promise<ThreatRadarSignal[]> =>
+    http.get(`/threat-radar/watchlists/${watchlist}`).then(r => r.data),
+  queue: (queue: 'hunts' | 'psirt' | 'ir' | 'detections' | 'reports' | 'actions' | 'marketplace' | 'supply-chain' | 'audit'): Promise<Array<Record<string, unknown>>> =>
+    http.get(`/threat-radar/queues/${queue}`).then(r => r.data),
+};
+
+// ── Management Summary ────────────────────────────────────────────────────────
+
+export interface ManagementAdmiralty {
+  letter: string;
+  digit: string;
+  rationale_ru: string;
+}
+
+export interface ManagementEmitterWarning {
+  code: string;
+  message: string;
+  severity: string;
+  pattern: string;
+}
+
+export interface ManagementSufficiency {
+  sufficiency_pct: number;
+  fields_checked: string[];
+  partial_fields: string[];
+  blind_fields: string[];
+}
+
+export interface ManagementAqlRule {
+  rule_id: string;
+  log_source: string;
+  aql: string;
+  copy_ready: boolean;
+  warnings: ManagementEmitterWarning[];
+  sufficiency: ManagementSufficiency | null;
+}
+
+export interface ManagementHypothesis {
+  technique_id: string;
+  technique_name: string;
+  tactic: string;
+  priority: number;
+  coverage_status: string;
+  coverage_status_ru: string;
+  covering_rule_ids: string[];
+  copy_ready_aql: ManagementAqlRule | null;
+  secondary_blind_flags: string[];
+  is_chokepoint: boolean;
+  admiralty: ManagementAdmiralty;
+  gap_marker_ru: string | null;
+  text_ru: string;
+  expected_evidence_ru: string;
+  candidate_chokepoints: HypothesisChokepoint[];
+  iocs: HypothesisIoc[];
+  threat_title: string;
+  threat_summary: string;
+  actor: string;
+  sectors: string[];
+  data_sources: string[];
+}
+
+export interface ManagementSummary {
+  threat_id: string;
+  title: string;
+  actor: string;
+  tenant_id: string;
+  tenant_name: string;
+  score: number;
+  zone: string;
+  status_counts: Record<string, number>;
+  tactic_coverage: Record<string, number>;
+  bluf_ru: string;
+  hypotheses: ManagementHypothesis[];
+}
+
+export const managementApi = {
+  summary: (params: { threat_id?: string; tenant_id?: string }): Promise<ManagementSummary> =>
+    http.get('/management/summary', { params }).then(r => r.data),
+};
+
+export interface HypothesisChokepoint {
+  field: string;
+  note_ru: string;
+}
+
+export interface HypothesisIoc {
+  ioc_type: string;
+  value: string;
+  note_ru: string;
+}
+
+export interface Hypothesis {
+  id: string;
+  threat_id: string;
+  tenant_id: string;
+  technique_id: string;
+  technique_name: string;
+  tactic: string;
+  priority: number;
+  zone: string;
+  status: 'proposed' | 'validated' | 'rejected';
+  coverage_status: string;
+  coverage_status_ru: string;
+  covering_rule_ids: string[];
+  admiralty: ManagementAdmiralty;
+  chokepoints: HypothesisChokepoint[];
+  candidate_chokepoints: HypothesisChokepoint[];
+  expected_evidence_ru: string;
+  text_ru: string;
+  threat_title: string;
+  threat_summary: string;
+  actor: string;
+  sectors: string[];
+  iocs: HypothesisIoc[];
+  data_sources: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export const hypothesesApi = {
+  list: (params?: { tenant_id?: string; status?: string; threat_id?: string }): Promise<Hypothesis[]> =>
+    http.get('/hypotheses', { params }).then(r => r.data),
+  get: (hypothesisId: string): Promise<Hypothesis> =>
+    http.get(`/hypotheses/${hypothesisId}`).then(r => r.data),
+  updateStatus: (hypothesisId: string, status: 'validated' | 'rejected'): Promise<Hypothesis> =>
+    http.patch(`/hypotheses/${hypothesisId}`, { status }).then(r => r.data),
+};
