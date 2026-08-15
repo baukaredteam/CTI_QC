@@ -22,6 +22,7 @@ class CustomField(BaseModel):
     event_id_context: str = ""
     availability: str = ""          # "full" | "partial"
     adversary_control: str = ""     # "LOW" | "MED" | "HIGH"
+    requires_gpo: bool = False      # field content depends on GPO config
     log_sources: list[str] = Field(default_factory=list)
     used_in_events: list[str] = Field(default_factory=list)
     notes: str = ""

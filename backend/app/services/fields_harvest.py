@@ -23,6 +23,7 @@ class HarvestedField:
     name: str
     is_indexed: bool = False
     is_semantic_filter: bool = False
+    requires_gpo: bool = False      # field content depends on GPO config
     availabilities: set[str] = field(default_factory=set)
     adversary_controls: set[str] = field(default_factory=set)
     used_in_rules: list[str] = field(default_factory=list)
@@ -45,6 +46,8 @@ def harvest_fields_from_rules(rf: RulesFile) -> dict[str, HarvestedField]:
                     is_semantic_filter=(key in SEMANTIC_FILTER_FIELDS),
                 )
             hf = result[key]
+            if cf.requires_gpo:
+                hf.requires_gpo = True
             if cf.availability:
                 hf.availabilities.add(cf.availability.lower())
             if cf.adversary_control:
@@ -71,6 +74,8 @@ def harvest_fields_from_fields_file(ff: FieldsFile) -> dict[str, HarvestedField]
                 is_semantic_filter=(key in SEMANTIC_FILTER_FIELDS),
             )
         hf = result[key]
+        if cf.requires_gpo:
+            hf.requires_gpo = True
         if cf.availability:
             hf.availabilities.add(cf.availability.lower())
         if cf.adversary_control:
@@ -92,8 +97,10 @@ def merge_harvests(
                     name=hf.name,
                     is_indexed=hf.is_indexed,
                     is_semantic_filter=hf.is_semantic_filter,
+                    requires_gpo=hf.requires_gpo,
                 )
             m = merged[key]
+            m.requires_gpo = m.requires_gpo or hf.requires_gpo
             m.availabilities.update(hf.availabilities)
             m.adversary_controls.update(hf.adversary_controls)
             for rid in hf.used_in_rules:

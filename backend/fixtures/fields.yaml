@@ -23,6 +23,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Mitigations"]
     availability: "full"          # ✅ Есть в логах!
     adversary_control: "HIGH"
+    requires_gpo: false
     used_in_events: ["1", "3", "4", "10", "11", "12", "36"]
     notes: "Полная командная строка процесса. Источник: ProcessCommandLine"
 
@@ -33,6 +34,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Mitigations"]
     availability: "partial"       # ⚠ В логе есть (ProcessPath), но в QRadar N/A
     adversary_control: "HIGH"
+    requires_gpo: false
     used_in_events: ["1", "3", "4", "10", "11", "12", "36"]
     notes: "⚠ В QRadar парсится как N/A. Требуется настройка парсера."
 
@@ -43,6 +45,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Mitigations"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["1", "3", "4", "10", "11", "12", "36"]
     notes: "PID процесса (CallingProcessId или ProcessId)"
 
@@ -53,6 +56,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Mitigations"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["1", "3", "4", "10", "11", "12", "36"]
     notes: "ID потока (CallingThreadId или TargetThreadId)"
 
@@ -63,6 +67,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Mitigations"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["1", "3", "4", "10", "11", "12", "36"]
     notes: "SID пользователя (UserID)"
 
@@ -73,6 +78,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Mitigations"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["1", "3", "4", "10", "11", "12", "36"]
     notes: "Полное описание события из Message"
 
@@ -83,6 +89,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Mitigations"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["1", "3", "4", "10", "11", "12", "36"]
     notes: "Исходное сообщение (дублирует event_description)"
 
@@ -93,6 +100,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Mitigations"]
     availability: "full"
     adversary_control: "HIGH"
+    requires_gpo: false
     used_in_events: ["3", "4"]
     notes: "Командная строка дочернего процесса (ChildCommandLine)"
 
@@ -103,6 +111,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Mitigations"]
     availability: "full"
     adversary_control: "HIGH"
+    requires_gpo: false
     used_in_events: ["3", "4"]
     notes: "Путь к дочернему процессу (ChildImagePathName)"
 
@@ -113,6 +122,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Mitigations"]
     availability: "full"
     adversary_control: "HIGH"
+    requires_gpo: false
     used_in_events: ["11", "12"]
     notes: "Имя загружаемого бинарника (ImageName) — для Code Integrity Guard"
 
@@ -127,6 +137,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Bits-Client"]
     availability: "full"
     adversary_control: "HIGH"
+    requires_gpo: false
     used_in_events: ["59", "60"]
     notes: "URL для BITS transfer. Источник: url"
 
@@ -137,6 +148,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Bits-Client"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["59", "60"]
     notes: "ID задачи BITS (Id)"
 
@@ -147,6 +159,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Bits-Client"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["59", "60"]
     notes: "Имя задачи BITS (name или jobTitle)"
 
@@ -157,6 +170,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Bits-Client"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["59", "60"]
     notes: "Размер файла в байтах (fileLength или bytesTotal)"
 
@@ -167,6 +181,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Bits-Client"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["60"]
     notes: "Передано байт (bytesTransferred)"
 
@@ -181,6 +196,7 @@ custom_fields:
     log_sources: ["PowerShell"]
     availability: "full"
     adversary_control: "HIGH"
+    requires_gpo: false
     used_in_events: ["800", "4104"]
     notes: "Текст PowerShell скрипта. Источник: ScriptBlockText или ScriptText"
 
@@ -191,6 +207,7 @@ custom_fields:
     log_sources: ["PowerShell"]
     availability: "full"
     adversary_control: "HIGH"
+    requires_gpo: true
     used_in_events: ["400", "800", "4104"]
     notes: "Командная строка из лога PowerShell"
 
@@ -201,6 +218,7 @@ custom_fields:
     log_sources: ["PowerShell"]
     availability: "full"
     adversary_control: "HIGH"
+    requires_gpo: false
     used_in_events: ["800"]
     notes: "Путь к исполняемому скрипту (ScriptName из лога 800)"
 
@@ -211,6 +229,7 @@ custom_fields:
     log_sources: ["PowerShell"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["800"]
     notes: "Полное имя пользователя (Domain\\Username) из лога 800"
 
@@ -225,6 +244,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4624", "4625", "4627"]
     notes: "Тип входа: 2=Interactive, 3=Network, 10=RemoteInteractive"
 
@@ -235,6 +255,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4624", "4625", "4627", "4648", "4688"]
     notes: "Целевое имя пользователя (TargetUserName)"
 
@@ -245,6 +266,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4624", "4625", "4627", "4648"]
     notes: "Домен целевого пользователя (TargetDomainName)"
 
@@ -255,6 +277,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4624", "4625", "4627", "4662"]
     notes: "SID целевого пользователя (TargetUserSid)"
 
@@ -265,6 +288,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4624", "4625", "4627", "4648"]
     notes: "Logon ID целевого пользователя (TargetLogonId)"
 
@@ -275,6 +299,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4611", "4672", "4688", "4698", "4699", "4701", "4702"]
     notes: "Имя пользователя, инициировавшего процесс (SubjectUserName)"
 
@@ -285,6 +310,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4611", "4672", "4688", "4698", "4699", "4701", "4702"]
     notes: "Домен пользователя, инициировавшего процесс (SubjectDomainName)"
 
@@ -295,6 +321,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4611", "4672", "4688", "4698", "4699", "4701", "4702"]
     notes: "SID пользователя, инициировавшего процесс (SubjectUserSid)"
 
@@ -305,6 +332,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4611", "4672", "4688", "4698", "4699", "4701", "4702"]
     notes: "Logon ID процесса (SubjectLogonId)"
 
@@ -315,6 +343,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "HIGH"
+    requires_gpo: false
     used_in_events: ["4648", "4688"]
     notes: "Путь к исполняемому файлу процесса (ProcessName или NewProcessName)"
 
@@ -325,6 +354,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "HIGH"
+    requires_gpo: false
     used_in_events: ["4688"]
     notes: "Имя исполняемого файла процесса (proc_file_name)"
 
@@ -335,6 +365,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4688"]
     notes: "Путь к родительскому процессу (ParentProcessName)"
 
@@ -345,6 +376,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4688"]
     notes: "Имя родительского процесса (proc_p_file_name)"
 
@@ -355,6 +387,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4688"]
     notes: "PID родительского процесса (ParentProcessId)"
 
@@ -365,6 +398,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4698", "4699", "4701", "4702"]
     notes: "Имя задачи планировщика (TaskName)"
 
@@ -375,6 +409,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Windows Firewall With Advanced Security"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["2006", "2033"]
     notes: "ID правила брандмауэра (RuleId)"
 
@@ -385,6 +420,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Windows Firewall With Advanced Security"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["2006"]
     notes: "Имя правила брандмауэра (RuleName)"
 
@@ -395,6 +431,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4624", "4625"]
     notes: "IP адрес источника (IpAddress)"
 
@@ -405,6 +442,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4624", "4625"]
     notes: "Порт назначения (IpPort)"
 
@@ -415,6 +453,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4625"]
     notes: "Код ошибки входа (Status и SubStatus)"
 
@@ -425,6 +464,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4627"]
     notes: "Группы пользователя из токена (GroupMembership)"
 
@@ -435,6 +475,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Security-Auditing"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["4672"]
     notes: "Список привилегий (PrivilegeList)"
 
@@ -449,6 +490,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-DNSServer"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["519"]
     notes: "Имя DNS записи (NAME)"
 
@@ -459,6 +501,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-DNSServer"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["519"]
     notes: "RDATA DNS записи"
 
@@ -473,6 +516,7 @@ custom_fields:
     log_sources: ["Application Error"]
     availability: "full"
     adversary_control: "HIGH"
+    requires_gpo: false
     used_in_events: ["1000"]
     notes: "Путь к упавшему приложению (Faulting application path)"
 
@@ -483,6 +527,7 @@ custom_fields:
     log_sources: ["Application Error"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["1000", "1001"]
     notes: "Описание события из Message"
 
@@ -497,6 +542,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Windows Firewall With Advanced Security"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["2006", "2033"]
     notes: "Приложение, изменяющее правило брандмауэра (ModifyingApplication)"
 
@@ -507,6 +553,7 @@ custom_fields:
     log_sources: ["Microsoft-Windows-Windows Firewall With Advanced Security"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: ["2033"]
     notes: "Тип хранилища брандмауэра (Store Type)"
 
@@ -521,6 +568,7 @@ custom_fields:
     log_sources: ["*"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: []
     notes: "ID события (EventID)"
 
@@ -531,6 +579,7 @@ custom_fields:
     log_sources: ["*"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: []
     notes: "Источник события (SourceName или event_log_source)"
 
@@ -541,6 +590,7 @@ custom_fields:
     log_sources: ["*"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: []
     notes: "Имя лога (Channel или event_log_name)"
 
@@ -551,6 +601,7 @@ custom_fields:
     log_sources: ["*"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: []
     notes: "Время события (EventTime)"
 
@@ -561,6 +612,7 @@ custom_fields:
     log_sources: ["*"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: []
     notes: "Тип события: INFO, WARNING, ERROR, AUDIT_SUCCESS, AUDIT_FAILURE"
 
@@ -571,6 +623,7 @@ custom_fields:
     log_sources: ["*"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: []
     notes: "Имя хоста (dev_hostname или Hostname)"
 
@@ -581,5 +634,6 @@ custom_fields:
     log_sources: ["*"]
     availability: "full"
     adversary_control: "LOW"
+    requires_gpo: false
     used_in_events: []
     notes: "IP адрес устройства (dev_ipv4 или HostIP)"

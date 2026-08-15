@@ -70,3 +70,20 @@ cannot conflict.
   discovery) — no WARN needed.
 - Evidence: 15/15 ticket tests + 63/63 adjacent M6 suites pass (coverage-fail
   only because subset runs in isolation, total-suite coverage unaffected).
+
+## Ticket 02 — resolved (see `issues/02-requires-gpo.md`)
+
+- `backend/fixtures/fields.yaml`: all **54 entries** on disk carry an explicit
+  `requires_gpo`; `cmdline: true`, the other 53 explicitly `false`. The
+  ticket's "42 fields / other 41" was the stale `metadata.total_fields: 42`
+  figure — the fixture drifted to 54 entries (49 unique names;
+  `proc_file_path` ×3, `event_description` ×2, `task_name` ×2,
+  `proc_usr_sid` ×2). Every entry got the flag; `metadata.total_fields` left
+  untouched (ADDITIVE-ONLY).
+- Propagation: `CustomField.requires_gpo: bool = False` (schema),
+  `HarvestedField.requires_gpo: bool = False` + readers OR-set it from
+  `cf.requires_gpo`, `merge_harvests` OR-combines. Legacy input without the
+  key defaults to `false` (schema + harvest) — no error.
+- Evidence: 9/9 ticket tests green; full backend regression **977 passed,
+  11 skipped**, coverage 69.25% (gate `--cov-fail-under=60` passes on the
+  full run; lone-file runs cannot reach it — same note as ticket 01).
