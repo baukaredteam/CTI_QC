@@ -1,7 +1,7 @@
 # 01 — MITRE ATT&CK v15 offline fixture
 
 **Type:** task
-**Status:** claimed
+**Status:** resolved
 **Blocked by:** None — can start immediately
 
 **What to build:** A deterministic offline basis for technique metadata so a
@@ -75,3 +75,51 @@ fixture input, no DB).
 **ADDITIVE-ONLY:** new files + appended loader code in `mitre_meta.py`; the
 working enrich path and `threadlinqs_client.py`/`threadlinqs_cache.py` are not
 rewritten.
+
+## Answer
+
+Resolved in commit `…` (ticket 01, push `cti_qc/main`).
+
+Delivered:
+
+- `backend/fixtures/mitre_attack_v15.yaml` — 780 techniques, provenance
+  `version: 15.1`, `generated_at: 2026-08-15` (date-only, F3), `source:
+  mitre_attack_stix_15.1`, `license: CC-BY-4.0`. No `name == id` placeholders.
+- `backend/scripts/generate_mitre_v15_fixture.py` — two layers (F2): pure
+  `build_fixture(stix_objects, provenance) -> bytes` (deterministic, byte
+  identical across runs) and live `fetch_stix(client)` via generic
+  `call_tool("export_stix", {...})`. New `--bundle PATH` mode reads a canonical
+  MITRE STIX bundle file. `--check` compares `build_fixture(stix_sample)` to the
+  committed fixture. Script header stays app-free (same convention as
+  `smoke_threadlinqs.py`).
+- `app/services/mitre_meta.py` — appended `_load_v15_fixture` (lru), 
+  `fixture_technique`, `resolve_technique_meta` with the four-level fallback
+  (HC-3): bundle names → injected `live_lookup` (client + 7-day cache closure
+  wired by caller) → YAML v15 → hardcoded tables. No `threadlinqs_*` imports,
+  no network.
+- `tests/unit/test_mitre_meta.py` — 15 tests: F1 union=47 ⊆ fixture,
+  F2 byte-determinism via committed `tests/fixtures/stix_sample.json` + fixed
+  provenance, F3 date-only, F4 non-empty `data_sources`, HC-3 fallback order
+  (levels 1/3/4 with `live_lookup=None`, level 2 with a fake callable).
+- `tests/fixtures/stix_sample.json` — minimal STIX v15 sample (committed).
+
+**Verified spec deviation (documented here and in map.md):** the live
+Threadlinqs MCP v7.1.0 tool list (54 tools, Purple tier) has **no
+`export_stix` tool**, so the fixture is generated from the canonical MITRE
+ATT&CK v15.1 `enterprise-attack.json` STIX bundle via `--bundle` (same canonical
+STIX source P4 specifies; the typed `export_stix` wrapper of ticket 06 does not
+yet exist). Provenance `source` therefore honestly reads
+`mitre_attack_stix_15.1` instead of the ticket's `threadlinqs_mcp_export_stix`.
+`fetch_stix(client)`/`--write` remain for when the tool lands; `--bundle` needs
+no API key. F4 required no enrichment: canonical v15.1 attack-pattern objects
+carry `x_mitre_data_sources` for all 47 union techniques.
+
+**Canary `T1518.001`:** present in the fixture as `Security Software
+Discovery` (discovery) with non-empty data_sources — no WARN/map note needed.
+
+**Test evidence:** `pytest tests/unit/test_mitre_meta.py` → 15 passed.
+Regression sweep of the seven adjacent M6 suites (`test_m6_meta`,
+`test_m6_coverage`, `test_m6_admiralty`, `test_m6_aql_emitter`,
+`test_m6_tenants`, `test_m6_weights`, `test_technique_enrichment`) → 63 passed.
+(`--cov-fail-under=60` reports a coverage failure only because a subset of the
+suite was run in isolation; total-suite coverage is unaffected.)

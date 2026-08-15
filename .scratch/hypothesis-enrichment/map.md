@@ -56,5 +56,17 @@ cannot conflict.
 
 ## Fog
 
-- Exact tool names for `export_stix`, `get_attack_flow`, `get_threat_hunting_bundle`, `predict_mitre_transitions` are plan-level; confirm against the real Threadlinqs tool list (54 tools, Purple tier) during ticket 06 / smoke in ticket 11. `get_mitre_technique` is confirmed by the existing enrich path.
+- Exact tool names for `export_stix`, `get_attack_flow`, `get_threat_hunting_bundle`, `predict_mitre_transitions` are plan-level; confirm against the real Threadlinqs tool list (54 tools, Purple tier) during ticket 06 / smoke in ticket 11. `get_mitre_technique` is confirmed by the existing enrich path. **Ticket 01 confirmed `export_stix` is ABSENT** from the v7.1.0 tool list (54 tools enumerated, no `export_stix`) → generator gains a `--bundle PATH` mode reading the canonical MITRE ATT&CK v15.1 `enterprise-attack.json` (same canonical STIX source P4 specifies); `fetch_stix(client)`/`--write` remain for when the tool lands.
 - The 280-hypothesis acceptance target is re-checked after the GATE scan (ticket 11).
+
+## Ticket 01 — resolved (see `issues/01-mitre-v15-fixture.md`)
+
+- Fixture `backend/fixtures/mitre_attack_v15.yaml` committed: 780 techniques,
+  provenance `{version: 15.1, generated_at: 2026-08-15, source:
+  mitre_attack_stix_15.1, license: CC-BY-4.0}`. Devation: `source` reads the
+  canonical bundle name (not `threadlinqs_mcp_export_stix`) because the live
+  MCP v7.1.0 has no `export_stix` tool — honest provenance over ticket text.
+- Canary `T1518.001` present as `Security Software Discovery` (non-placeholder,
+  discovery) — no WARN needed.
+- Evidence: 15/15 ticket tests + 63/63 adjacent M6 suites pass (coverage-fail
+  only because subset runs in isolation, total-suite coverage unaffected).

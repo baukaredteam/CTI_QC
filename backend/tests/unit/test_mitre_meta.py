@@ -104,9 +104,7 @@ _FIXED_PROVENANCE = {
 
 def test_mitre_meta_imports_no_threadlinqs_modules():
     import app.services.mitre_meta as mm
-    sys.modules.pop("app.services.mitre_meta", None)
-    mod = importlib.reload(mm)
-    src = pathlib.Path(mod.__file__).read_text(encoding="utf-8")
+    src = pathlib.Path(mm.__file__).read_text(encoding="utf-8")
     assert "threadlinqs_client" not in src
     assert "threadlinqs_cache" not in src
 

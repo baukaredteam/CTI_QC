@@ -1,0 +1,5113 @@
+_provenance:
+  generated_at: '2026-08-15'
+  license: CC-BY-4.0
+  source: mitre_attack_stix_15.1
+  version: '15.1'
+techniques:
+  T1001:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    name: Data Obfuscation
+    tactic: command-and-control
+  T1001.001:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    name: Junk Data
+    tactic: command-and-control
+  T1001.002:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    name: Steganography
+    tactic: command-and-control
+  T1001.003:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    name: Protocol Impersonation
+    tactic: command-and-control
+  T1002:
+    data_sources: []
+    name: Data Compressed
+    tactic: exfiltration
+  T1003:
+    data_sources:
+    - 'Active Directory: Active Directory Object Access'
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'File: File Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: OS API Execution'
+    - 'Process: Process Access'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Access'
+    name: OS Credential Dumping
+    tactic: credential-access
+  T1003.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'Logon Session: Logon Session Creation'
+    - 'Process: OS API Execution'
+    - 'Process: Process Access'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: LSASS Memory
+    tactic: credential-access
+  T1003.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'File: File Creation'
+    - 'Windows Registry: Windows Registry Key Access'
+    name: Security Account Manager
+    tactic: credential-access
+  T1003.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    name: NTDS
+    tactic: credential-access
+  T1003.004:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Windows Registry: Windows Registry Key Access'
+    name: LSA Secrets
+    tactic: credential-access
+  T1003.005:
+    data_sources:
+    - 'Command: Command Execution'
+    name: Cached Domain Credentials
+    tactic: credential-access
+  T1003.006:
+    data_sources:
+    - 'Active Directory: Active Directory Object Access'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: DCSync
+    tactic: credential-access
+  T1003.007:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    name: Proc Filesystem
+    tactic: credential-access
+  T1003.008:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    name: /etc/passwd and /etc/shadow
+    tactic: credential-access
+  T1004:
+    data_sources: []
+    name: Winlogon Helper DLL
+    tactic: persistence
+  T1005:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    name: Data from Local System
+    tactic: collection
+  T1006:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Drive: Drive Access'
+    - 'File: File Creation'
+    name: Direct Volume Access
+    tactic: defense-evasion
+  T1007:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: System Service Discovery
+    tactic: discovery
+  T1008:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Fallback Channels
+    tactic: command-and-control
+  T1009:
+    data_sources: []
+    name: Binary Padding
+    tactic: defense-evasion
+  T1010:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Application Window Discovery
+    tactic: discovery
+  T1011:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Exfiltration Over Other Network Medium
+    tactic: exfiltration
+  T1011.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Exfiltration Over Bluetooth
+    tactic: exfiltration
+  T1012:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Access'
+    name: Query Registry
+    tactic: discovery
+  T1013:
+    data_sources: []
+    name: Port Monitors
+    tactic: persistence
+  T1014:
+    data_sources:
+    - 'Drive: Drive Modification'
+    - 'File: File Modification'
+    - 'Firmware: Firmware Modification'
+    name: Rootkit
+    tactic: defense-evasion
+  T1015:
+    data_sources: []
+    name: Accessibility Features
+    tactic: persistence
+  T1016:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    name: System Network Configuration Discovery
+    tactic: discovery
+  T1016.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Internet Connection Discovery
+    tactic: discovery
+  T1016.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    name: Wi-Fi Discovery
+    tactic: discovery
+  T1017:
+    data_sources: []
+    name: Application Deployment Software
+    tactic: lateral-movement
+  T1018:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Process: Process Creation'
+    name: Remote System Discovery
+    tactic: discovery
+  T1019:
+    data_sources: []
+    name: System Firmware
+    tactic: persistence
+  T1020:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Script: Script Execution'
+    name: Automated Exfiltration
+    tactic: exfiltration
+  T1020.001:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Traffic Duplication
+    tactic: exfiltration
+  T1021:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Logon Session: Logon Session Creation'
+    - 'Module: Module Load'
+    - 'Network Share: Network Share Access'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: Process Creation'
+    - 'WMI: WMI Creation'
+    name: Remote Services
+    tactic: lateral-movement
+  T1021.001:
+    data_sources:
+    - 'Logon Session: Logon Session Creation'
+    - 'Logon Session: Logon Session Metadata'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: Process Creation'
+    name: Remote Desktop Protocol
+    tactic: lateral-movement
+  T1021.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Logon Session: Logon Session Creation'
+    - 'Network Share: Network Share Access'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: Process Creation'
+    name: SMB/Windows Admin Shares
+    tactic: lateral-movement
+  T1021.003:
+    data_sources:
+    - 'Module: Module Load'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Process: Process Creation'
+    name: Distributed Component Object Model
+    tactic: lateral-movement
+  T1021.004:
+    data_sources:
+    - 'Logon Session: Logon Session Creation'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Process: Process Creation'
+    name: SSH
+    tactic: lateral-movement
+  T1021.005:
+    data_sources:
+    - 'Logon Session: Logon Session Creation'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Process: Process Creation'
+    name: VNC
+    tactic: lateral-movement
+  T1021.006:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Logon Session: Logon Session Creation'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: Process Creation'
+    - 'Service: Service Metadata'
+    name: Windows Remote Management
+    tactic: lateral-movement
+  T1021.007:
+    data_sources:
+    - 'Logon Session: Logon Session Creation'
+    name: Cloud Services
+    tactic: lateral-movement
+  T1021.008:
+    data_sources:
+    - 'Logon Session: Logon Session Creation'
+    name: Direct Cloud VM Connections
+    tactic: lateral-movement
+  T1022:
+    data_sources: []
+    name: Data Encrypted
+    tactic: exfiltration
+  T1023:
+    data_sources: []
+    name: Shortcut Modification
+    tactic: persistence
+  T1024:
+    data_sources: []
+    name: Custom Cryptographic Protocol
+    tactic: command-and-control
+  T1025:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    name: Data from Removable Media
+    tactic: collection
+  T1026:
+    data_sources: []
+    name: Multiband Communication
+    tactic: command-and-control
+  T1027:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Metadata'
+    - 'Module: Module Load'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    - 'WMI: WMI Creation'
+    - 'Windows Registry: Windows Registry Key Creation'
+    name: Obfuscated Files or Information
+    tactic: defense-evasion
+  T1027.001:
+    data_sources:
+    - 'File: File Metadata'
+    name: Binary Padding
+    tactic: defense-evasion
+  T1027.002:
+    data_sources:
+    - 'File: File Metadata'
+    name: Software Packing
+    tactic: defense-evasion
+  T1027.003:
+    data_sources:
+    - 'File: File Metadata'
+    name: Steganography
+    tactic: defense-evasion
+  T1027.004:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Metadata'
+    - 'Process: Process Creation'
+    name: Compile After Delivery
+    tactic: defense-evasion
+  T1027.005:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    name: Indicator Removal from Tools
+    tactic: defense-evasion
+  T1027.006:
+    data_sources:
+    - 'File: File Creation'
+    name: HTML Smuggling
+    tactic: defense-evasion
+  T1027.007:
+    data_sources:
+    - 'File: File Metadata'
+    - 'Module: Module Load'
+    - 'Process: OS API Execution'
+    name: Dynamic API Resolution
+    tactic: defense-evasion
+  T1027.008:
+    data_sources:
+    - 'File: File Metadata'
+    name: Stripped Payloads
+    tactic: defense-evasion
+  T1027.009:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Metadata'
+    name: Embedded Payloads
+    tactic: defense-evasion
+  T1027.010:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Metadata'
+    - 'Script: Script Execution'
+    name: Command Obfuscation
+    tactic: defense-evasion
+  T1027.011:
+    data_sources:
+    - 'WMI: WMI Creation'
+    - 'Windows Registry: Windows Registry Key Creation'
+    name: Fileless Storage
+    tactic: defense-evasion
+  T1027.012:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Metadata'
+    name: LNK Icon Smuggling
+    tactic: defense-evasion
+  T1027.013:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Metadata'
+    name: Encrypted/Encoded File
+    tactic: defense-evasion
+  T1028:
+    data_sources: []
+    name: Windows Remote Management
+    tactic: execution
+  T1029:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Scheduled Transfer
+    tactic: exfiltration
+  T1030:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Data Transfer Size Limits
+    tactic: exfiltration
+  T1031:
+    data_sources: []
+    name: Modify Existing Service
+    tactic: persistence
+  T1032:
+    data_sources: []
+    name: Standard Cryptographic Protocol
+    tactic: command-and-control
+  T1033:
+    data_sources:
+    - 'Active Directory: Active Directory Object Access'
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: OS API Execution'
+    - 'Process: Process Access'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Access'
+    name: System Owner/User Discovery
+    tactic: discovery
+  T1034:
+    data_sources: []
+    name: Path Interception
+    tactic: persistence
+  T1035:
+    data_sources: []
+    name: Service Execution
+    tactic: execution
+  T1036:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Metadata'
+    - 'File: File Modification'
+    - 'Image: Image Metadata'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Process: Process Metadata'
+    - 'Scheduled Job: Scheduled Job Metadata'
+    - 'Scheduled Job: Scheduled Job Modification'
+    - 'Service: Service Creation'
+    - 'Service: Service Metadata'
+    name: Masquerading
+    tactic: defense-evasion
+  T1036.001:
+    data_sources:
+    - 'File: File Metadata'
+    name: Invalid Code Signature
+    tactic: defense-evasion
+  T1036.002:
+    data_sources:
+    - 'File: File Metadata'
+    name: Right-to-Left Override
+    tactic: defense-evasion
+  T1036.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Metadata'
+    - 'File: File Modification'
+    - 'Process: Process Metadata'
+    name: Rename System Utilities
+    tactic: defense-evasion
+  T1036.004:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Scheduled Job: Scheduled Job Metadata'
+    - 'Scheduled Job: Scheduled Job Modification'
+    - 'Service: Service Creation'
+    - 'Service: Service Metadata'
+    name: Masquerade Task or Service
+    tactic: defense-evasion
+  T1036.005:
+    data_sources:
+    - 'File: File Metadata'
+    - 'Image: Image Metadata'
+    - 'Process: Process Creation'
+    - 'Process: Process Metadata'
+    name: Match Legitimate Name or Location
+    tactic: defense-evasion
+  T1036.006:
+    data_sources:
+    - 'File: File Metadata'
+    name: Space after Filename
+    tactic: defense-evasion
+  T1036.007:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Metadata'
+    name: Double File Extension
+    tactic: defense-evasion
+  T1036.008:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    name: Masquerade File Type
+    tactic: defense-evasion
+  T1036.009:
+    data_sources:
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Break Process Trees
+    tactic: defense-evasion
+  T1037:
+    data_sources:
+    - 'Active Directory: Active Directory Object Modification'
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Creation'
+    name: Boot or Logon Initialization Scripts
+    tactic: persistence
+  T1037.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Creation'
+    name: Logon Script (Windows)
+    tactic: persistence
+  T1037.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: Login Hook
+    tactic: persistence
+  T1037.003:
+    data_sources:
+    - 'Active Directory: Active Directory Object Modification'
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: Network Logon Script
+    tactic: persistence
+  T1037.004:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: RC Scripts
+    tactic: persistence
+  T1037.005:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: Startup Items
+    tactic: persistence
+  T1038:
+    data_sources: []
+    name: DLL Search Order Hijacking
+    tactic: persistence
+  T1039:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Network Share: Network Share Access'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Data from Network Shared Drive
+    tactic: collection
+  T1040:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Network Sniffing
+    tactic: credential-access
+  T1041:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Exfiltration Over C2 Channel
+    tactic: exfiltration
+  T1042:
+    data_sources: []
+    name: Change Default File Association
+    tactic: persistence
+  T1043:
+    data_sources: []
+    name: Commonly Used Port
+    tactic: command-and-control
+  T1044:
+    data_sources: []
+    name: File System Permissions Weakness
+    tactic: persistence
+  T1045:
+    data_sources: []
+    name: Software Packing
+    tactic: defense-evasion
+  T1046:
+    data_sources:
+    - 'Cloud Service: Cloud Service Enumeration'
+    - 'Command: Command Execution'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Network Service Discovery
+    tactic: discovery
+  T1047:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Process: Process Creation'
+    - 'WMI: WMI Creation'
+    name: Windows Management Instrumentation
+    tactic: execution
+  T1048:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Cloud Storage: Cloud Storage Access'
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Exfiltration Over Alternative Protocol
+    tactic: exfiltration
+  T1048.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Exfiltration Over Symmetric Encrypted Non-C2 Protocol
+    tactic: exfiltration
+  T1048.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Exfiltration Over Asymmetric Encrypted Non-C2 Protocol
+    tactic: exfiltration
+  T1048.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Exfiltration Over Unencrypted Non-C2 Protocol
+    tactic: exfiltration
+  T1049:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: System Network Connections Discovery
+    tactic: discovery
+  T1050:
+    data_sources: []
+    name: New Service
+    tactic: persistence
+  T1051:
+    data_sources: []
+    name: Shared Webroot
+    tactic: lateral-movement
+  T1052:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Drive: Drive Creation'
+    - 'File: File Access'
+    - 'Process: Process Creation'
+    name: Exfiltration Over Physical Medium
+    tactic: exfiltration
+  T1052.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Drive: Drive Creation'
+    - 'File: File Access'
+    - 'Process: Process Creation'
+    name: Exfiltration over USB
+    tactic: exfiltration
+  T1053:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Container: Container Creation'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Scheduled Job: Scheduled Job Creation'
+    name: Scheduled Task/Job
+    tactic: execution
+  T1053.001:
+    data_sources: []
+    name: At (Linux)
+    tactic: execution
+  T1053.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: Process Creation'
+    - 'Scheduled Job: Scheduled Job Creation'
+    name: At
+    tactic: execution
+  T1053.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Scheduled Job: Scheduled Job Creation'
+    name: Cron
+    tactic: execution
+  T1053.004:
+    data_sources: []
+    name: Launchd
+    tactic: execution
+  T1053.005:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: Process Creation'
+    - 'Scheduled Job: Scheduled Job Creation'
+    - 'Windows Registry: Windows Registry Key Creation'
+    name: Scheduled Task
+    tactic: execution
+  T1053.006:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Scheduled Job: Scheduled Job Creation'
+    name: Systemd Timers
+    tactic: execution
+  T1053.007:
+    data_sources:
+    - 'Container: Container Creation'
+    - 'File: File Creation'
+    - 'Scheduled Job: Scheduled Job Creation'
+    name: Container Orchestration Job
+    tactic: execution
+  T1054:
+    data_sources: []
+    name: Indicator Blocking
+    tactic: defense-evasion
+  T1055:
+    data_sources:
+    - 'File: File Metadata'
+    - 'File: File Modification'
+    - 'Module: Module Load'
+    - 'Process: OS API Execution'
+    - 'Process: Process Access'
+    - 'Process: Process Metadata'
+    - 'Process: Process Modification'
+    name: Process Injection
+    tactic: defense-evasion
+  T1055.001:
+    data_sources:
+    - 'Module: Module Load'
+    - 'Process: OS API Execution'
+    - 'Process: Process Access'
+    - 'Process: Process Metadata'
+    - 'Process: Process Modification'
+    name: Dynamic-link Library Injection
+    tactic: defense-evasion
+  T1055.002:
+    data_sources:
+    - 'Process: OS API Execution'
+    - 'Process: Process Access'
+    - 'Process: Process Modification'
+    name: Portable Executable Injection
+    tactic: defense-evasion
+  T1055.003:
+    data_sources:
+    - 'Process: OS API Execution'
+    - 'Process: Process Access'
+    - 'Process: Process Modification'
+    name: Thread Execution Hijacking
+    tactic: defense-evasion
+  T1055.004:
+    data_sources:
+    - 'Process: OS API Execution'
+    - 'Process: Process Access'
+    - 'Process: Process Modification'
+    name: Asynchronous Procedure Call
+    tactic: defense-evasion
+  T1055.005:
+    data_sources:
+    - 'Process: OS API Execution'
+    - 'Process: Process Access'
+    - 'Process: Process Modification'
+    name: Thread Local Storage
+    tactic: defense-evasion
+  T1055.008:
+    data_sources:
+    - 'Process: OS API Execution'
+    - 'Process: Process Access'
+    - 'Process: Process Modification'
+    name: Ptrace System Calls
+    tactic: defense-evasion
+  T1055.009:
+    data_sources:
+    - 'File: File Modification'
+    name: Proc Memory
+    tactic: defense-evasion
+  T1055.011:
+    data_sources:
+    - 'Process: OS API Execution'
+    name: Extra Window Memory Injection
+    tactic: defense-evasion
+  T1055.012:
+    data_sources:
+    - 'Process: OS API Execution'
+    - 'Process: Process Access'
+    - 'Process: Process Creation'
+    - 'Process: Process Modification'
+    name: Process Hollowing
+    tactic: defense-evasion
+  T1055.013:
+    data_sources:
+    - 'File: File Metadata'
+    - 'Process: OS API Execution'
+    name: Process Doppelgänging
+    tactic: defense-evasion
+  T1055.014:
+    data_sources:
+    - 'Module: Module Load'
+    - 'Process: OS API Execution'
+    name: VDSO Hijacking
+    tactic: defense-evasion
+  T1055.015:
+    data_sources:
+    - 'Process: OS API Execution'
+    - 'Process: Process Modification'
+    name: ListPlanting
+    tactic: defense-evasion
+  T1056:
+    data_sources:
+    - 'Driver: Driver Load'
+    - 'File: File Modification'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Process: Process Metadata'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Input Capture
+    tactic: collection
+  T1056.001:
+    data_sources:
+    - 'Driver: Driver Load'
+    - 'Process: OS API Execution'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Keylogging
+    tactic: collection
+  T1056.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    name: GUI Input Capture
+    tactic: collection
+  T1056.003:
+    data_sources:
+    - 'File: File Modification'
+    name: Web Portal Capture
+    tactic: collection
+  T1056.004:
+    data_sources:
+    - 'Process: OS API Execution'
+    - 'Process: Process Metadata'
+    name: Credential API Hooking
+    tactic: collection
+  T1057:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Process Discovery
+    tactic: discovery
+  T1058:
+    data_sources: []
+    name: Service Registry Permissions Weakness
+    tactic: persistence
+  T1059:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Process: Process Metadata'
+    - 'Script: Script Execution'
+    name: Command and Scripting Interpreter
+    tactic: execution
+  T1059.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Process: Process Metadata'
+    - 'Script: Script Execution'
+    name: PowerShell
+    tactic: execution
+  T1059.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: AppleScript
+    tactic: execution
+  T1059.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Windows Command Shell
+    tactic: execution
+  T1059.004:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Unix Shell
+    tactic: execution
+  T1059.005:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    name: Visual Basic
+    tactic: execution
+  T1059.006:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Python
+    tactic: execution
+  T1059.007:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    name: JavaScript
+    tactic: execution
+  T1059.008:
+    data_sources:
+    - 'Command: Command Execution'
+    name: Network Device CLI
+    tactic: execution
+  T1059.009:
+    data_sources:
+    - 'Command: Command Execution'
+    name: Cloud API
+    tactic: execution
+  T1059.010:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: AutoHotKey & AutoIT
+    tactic: execution
+  T1060:
+    data_sources: []
+    name: Registry Run Keys / Startup Folder
+    tactic: persistence
+  T1061:
+    data_sources: []
+    name: Graphical User Interface
+    tactic: execution
+  T1062:
+    data_sources: []
+    name: Hypervisor
+    tactic: persistence
+  T1063:
+    data_sources: []
+    name: Security Software Discovery
+    tactic: discovery
+  T1064:
+    data_sources: []
+    name: Scripting
+    tactic: defense-evasion
+  T1065:
+    data_sources: []
+    name: Uncommonly Used Port
+    tactic: command-and-control
+  T1066:
+    data_sources: []
+    name: Indicator Removal from Tools
+    tactic: defense-evasion
+  T1067:
+    data_sources: []
+    name: Bootkit
+    tactic: persistence
+  T1068:
+    data_sources:
+    - 'Driver: Driver Load'
+    - 'Process: Process Creation'
+    name: Exploitation for Privilege Escalation
+    tactic: privilege-escalation
+  T1069:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'Group: Group Enumeration'
+    - 'Group: Group Metadata'
+    - 'Process: Process Creation'
+    name: Permission Groups Discovery
+    tactic: discovery
+  T1069.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Group: Group Enumeration'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Local Groups
+    tactic: discovery
+  T1069.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Group: Group Enumeration'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Domain Groups
+    tactic: discovery
+  T1069.003:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'Group: Group Enumeration'
+    - 'Group: Group Metadata'
+    - 'Process: Process Creation'
+    name: Cloud Groups
+    tactic: discovery
+  T1070:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'File: File Deletion'
+    - 'File: File Metadata'
+    - 'File: File Modification'
+    - 'Firewall: Firewall Rule Modification'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Scheduled Job: Scheduled Job Modification'
+    - 'User Account: User Account Authentication'
+    - 'User Account: User Account Deletion'
+    - 'Windows Registry: Windows Registry Key Deletion'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Indicator Removal
+    tactic: defense-evasion
+  T1070.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Deletion'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Clear Windows Event Logs
+    tactic: defense-evasion
+  T1070.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Deletion'
+    - 'File: File Modification'
+    name: Clear Linux or Mac System Logs
+    tactic: defense-evasion
+  T1070.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Deletion'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'User Account: User Account Authentication'
+    name: Clear Command History
+    tactic: defense-evasion
+  T1070.004:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Deletion'
+    name: File Deletion
+    tactic: defense-evasion
+  T1070.005:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Process: Process Creation'
+    - 'User Account: User Account Authentication'
+    name: Network Share Connection Removal
+    tactic: defense-evasion
+  T1070.006:
+    data_sources:
+    - 'File: File Metadata'
+    - 'File: File Modification'
+    name: Timestomp
+    tactic: defense-evasion
+  T1070.007:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    - 'Firewall: Firewall Rule Modification'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Clear Network Connection History and Configurations
+    tactic: defense-evasion
+  T1070.008:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'File: File Deletion'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: Clear Mailbox Data
+    tactic: defense-evasion
+  T1070.009:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Deletion'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Scheduled Job: Scheduled Job Modification'
+    - 'User Account: User Account Deletion'
+    - 'Windows Registry: Windows Registry Key Deletion'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Clear Persistence
+    tactic: defense-evasion
+  T1071:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Application Layer Protocol
+    tactic: command-and-control
+  T1071.001:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Web Protocols
+    tactic: command-and-control
+  T1071.002:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: File Transfer Protocols
+    tactic: command-and-control
+  T1071.003:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Mail Protocols
+    tactic: command-and-control
+  T1071.004:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: DNS
+    tactic: command-and-control
+  T1072:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Process: Process Creation'
+    name: Software Deployment Tools
+    tactic: execution
+  T1073:
+    data_sources: []
+    name: DLL Side-Loading
+    tactic: defense-evasion
+  T1074:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'File: File Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Data Staged
+    tactic: collection
+  T1074.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'File: File Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Local Data Staging
+    tactic: collection
+  T1074.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'File: File Creation'
+    name: Remote Data Staging
+    tactic: collection
+  T1075:
+    data_sources: []
+    name: Pass the Hash
+    tactic: lateral-movement
+  T1076:
+    data_sources: []
+    name: Remote Desktop Protocol
+    tactic: lateral-movement
+  T1077:
+    data_sources: []
+    name: Windows Admin Shares
+    tactic: lateral-movement
+  T1078:
+    data_sources:
+    - 'Logon Session: Logon Session Creation'
+    - 'Logon Session: Logon Session Metadata'
+    - 'User Account: User Account Authentication'
+    name: Valid Accounts
+    tactic: defense-evasion
+  T1078.001:
+    data_sources:
+    - 'Logon Session: Logon Session Creation'
+    - 'User Account: User Account Authentication'
+    name: Default Accounts
+    tactic: defense-evasion
+  T1078.002:
+    data_sources:
+    - 'Logon Session: Logon Session Creation'
+    - 'Logon Session: Logon Session Metadata'
+    - 'User Account: User Account Authentication'
+    name: Domain Accounts
+    tactic: defense-evasion
+  T1078.003:
+    data_sources:
+    - 'Logon Session: Logon Session Creation'
+    - 'Logon Session: Logon Session Metadata'
+    - 'User Account: User Account Authentication'
+    name: Local Accounts
+    tactic: defense-evasion
+  T1078.004:
+    data_sources:
+    - 'Logon Session: Logon Session Creation'
+    - 'Logon Session: Logon Session Metadata'
+    - 'User Account: User Account Authentication'
+    name: Cloud Accounts
+    tactic: defense-evasion
+  T1079:
+    data_sources: []
+    name: Multilayer Encryption
+    tactic: command-and-control
+  T1080:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Network Share: Network Share Access'
+    - 'Process: Process Creation'
+    name: Taint Shared Content
+    tactic: lateral-movement
+  T1081:
+    data_sources: []
+    name: Credentials in Files
+    tactic: credential-access
+  T1082:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: System Information Discovery
+    tactic: discovery
+  T1083:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: File and Directory Discovery
+    tactic: discovery
+  T1084:
+    data_sources: []
+    name: Windows Management Instrumentation Event Subscription
+    tactic: persistence
+  T1085:
+    data_sources: []
+    name: Rundll32
+    tactic: defense-evasion
+  T1086:
+    data_sources: []
+    name: PowerShell
+    tactic: execution
+  T1087:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Process: Process Creation'
+    name: Account Discovery
+    tactic: discovery
+  T1087.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Group: Group Enumeration'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Local Account
+    tactic: discovery
+  T1087.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Group: Group Enumeration'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Domain Account
+    tactic: discovery
+  T1087.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Email Account
+    tactic: discovery
+  T1087.004:
+    data_sources:
+    - 'Command: Command Execution'
+    name: Cloud Account
+    tactic: discovery
+  T1088:
+    data_sources: []
+    name: Bypass User Account Control
+    tactic: defense-evasion
+  T1089:
+    data_sources: []
+    name: Disabling Security Tools
+    tactic: defense-evasion
+  T1090:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Proxy
+    tactic: command-and-control
+  T1090.001:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Internal Proxy
+    tactic: command-and-control
+  T1090.002:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: External Proxy
+    tactic: command-and-control
+  T1090.003:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Multi-hop Proxy
+    tactic: command-and-control
+  T1090.004:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    name: Domain Fronting
+    tactic: command-and-control
+  T1091:
+    data_sources:
+    - 'Drive: Drive Creation'
+    - 'File: File Access'
+    - 'File: File Creation'
+    - 'Process: Process Creation'
+    name: Replication Through Removable Media
+    tactic: lateral-movement
+  T1092:
+    data_sources:
+    - 'Drive: Drive Access'
+    - 'Drive: Drive Creation'
+    name: Communication Through Removable Media
+    tactic: command-and-control
+  T1093:
+    data_sources: []
+    name: Process Hollowing
+    tactic: defense-evasion
+  T1094:
+    data_sources: []
+    name: Custom Command and Control Protocol
+    tactic: command-and-control
+  T1095:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Non-Application Layer Protocol
+    tactic: command-and-control
+  T1096:
+    data_sources: []
+    name: NTFS File Attributes
+    tactic: defense-evasion
+  T1097:
+    data_sources: []
+    name: Pass the Ticket
+    tactic: lateral-movement
+  T1098:
+    data_sources:
+    - 'Active Directory: Active Directory Object Modification'
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    - 'Group: Group Modification'
+    - 'Process: Process Creation'
+    - 'User Account: User Account Modification'
+    name: Account Manipulation
+    tactic: persistence
+  T1098.001:
+    data_sources:
+    - 'User Account: User Account Modification'
+    name: Additional Cloud Credentials
+    tactic: persistence
+  T1098.002:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Group: Group Modification'
+    - 'User Account: User Account Modification'
+    name: Additional Email Delegate Permissions
+    tactic: persistence
+  T1098.003:
+    data_sources:
+    - 'User Account: User Account Modification'
+    name: Additional Cloud Roles
+    tactic: persistence
+  T1098.004:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: SSH Authorized Keys
+    tactic: persistence
+  T1098.005:
+    data_sources:
+    - 'Active Directory: Active Directory Object Creation'
+    - 'Application Log: Application Log Content'
+    - 'User Account: User Account Modification'
+    name: Device Registration
+    tactic: persistence
+  T1098.006:
+    data_sources:
+    - 'User Account: User Account Modification'
+    name: Additional Container Cluster Roles
+    tactic: persistence
+  T1099:
+    data_sources: []
+    name: Timestomp
+    tactic: defense-evasion
+  T1100:
+    data_sources: []
+    name: Web Shell
+    tactic: persistence
+  T1101:
+    data_sources: []
+    name: Security Support Provider
+    tactic: persistence
+  T1102:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Web Service
+    tactic: command-and-control
+  T1102.001:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Dead Drop Resolver
+    tactic: command-and-control
+  T1102.002:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Bidirectional Communication
+    tactic: command-and-control
+  T1102.003:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: One-Way Communication
+    tactic: command-and-control
+  T1103:
+    data_sources: []
+    name: AppInit DLLs
+    tactic: persistence
+  T1104:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Multi-Stage Channels
+    tactic: command-and-control
+  T1105:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Ingress Tool Transfer
+    tactic: command-and-control
+  T1106:
+    data_sources:
+    - 'Module: Module Load'
+    - 'Process: OS API Execution'
+    name: Native API
+    tactic: execution
+  T1107:
+    data_sources: []
+    name: File Deletion
+    tactic: defense-evasion
+  T1108:
+    data_sources: []
+    name: Redundant Access
+    tactic: defense-evasion
+  T1109:
+    data_sources: []
+    name: Component Firmware
+    tactic: defense-evasion
+  T1110:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'User Account: User Account Authentication'
+    name: Brute Force
+    tactic: credential-access
+  T1110.001:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'User Account: User Account Authentication'
+    name: Password Guessing
+    tactic: credential-access
+  T1110.002:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'User Account: User Account Authentication'
+    name: Password Cracking
+    tactic: credential-access
+  T1110.003:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'User Account: User Account Authentication'
+    name: Password Spraying
+    tactic: credential-access
+  T1110.004:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'User Account: User Account Authentication'
+    name: Credential Stuffing
+    tactic: credential-access
+  T1111:
+    data_sources:
+    - 'Driver: Driver Load'
+    - 'Process: OS API Execution'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Multi-Factor Authentication Interception
+    tactic: credential-access
+  T1112:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Creation'
+    - 'Windows Registry: Windows Registry Key Deletion'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Modify Registry
+    tactic: defense-evasion
+  T1113:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    name: Screen Capture
+    tactic: collection
+  T1114:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Logon Session: Logon Session Creation'
+    - 'Network Traffic: Network Connection Creation'
+    name: Email Collection
+    tactic: collection
+  T1114.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    name: Local Email Collection
+    tactic: collection
+  T1114.002:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'Logon Session: Logon Session Creation'
+    - 'Network Traffic: Network Connection Creation'
+    name: Remote Email Collection
+    tactic: collection
+  T1114.003:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    name: Email Forwarding Rule
+    tactic: collection
+  T1115:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    name: Clipboard Data
+    tactic: collection
+  T1116:
+    data_sources: []
+    name: Code Signing
+    tactic: defense-evasion
+  T1117:
+    data_sources: []
+    name: Regsvr32
+    tactic: defense-evasion
+  T1118:
+    data_sources: []
+    name: InstallUtil
+    tactic: defense-evasion
+  T1119:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Script: Script Execution'
+    name: Automated Collection
+    tactic: collection
+  T1120:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Peripheral Device Discovery
+    tactic: discovery
+  T1121:
+    data_sources: []
+    name: Regsvcs/Regasm
+    tactic: defense-evasion
+  T1122:
+    data_sources: []
+    name: Component Object Model Hijacking
+    tactic: defense-evasion
+  T1123:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    name: Audio Capture
+    tactic: collection
+  T1124:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: System Time Discovery
+    tactic: discovery
+  T1125:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    name: Video Capture
+    tactic: collection
+  T1126:
+    data_sources: []
+    name: Network Share Connection Removal
+    tactic: defense-evasion
+  T1127:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Trusted Developer Utilities Proxy Execution
+    tactic: defense-evasion
+  T1127.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: MSBuild
+    tactic: defense-evasion
+  T1128:
+    data_sources: []
+    name: Netsh Helper DLL
+    tactic: persistence
+  T1129:
+    data_sources:
+    - 'Module: Module Load'
+    - 'Process: OS API Execution'
+    name: Shared Modules
+    tactic: execution
+  T1130:
+    data_sources: []
+    name: Install Root Certificate
+    tactic: defense-evasion
+  T1131:
+    data_sources: []
+    name: Authentication Package
+    tactic: persistence
+  T1132:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    name: Data Encoding
+    tactic: command-and-control
+  T1132.001:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    name: Standard Encoding
+    tactic: command-and-control
+  T1132.002:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    name: Non-Standard Encoding
+    tactic: command-and-control
+  T1133:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Logon Session: Logon Session Metadata'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: External Remote Services
+    tactic: persistence
+  T1134:
+    data_sources:
+    - 'Active Directory: Active Directory Object Modification'
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Process: Process Metadata'
+    - 'User Account: User Account Metadata'
+    name: Access Token Manipulation
+    tactic: defense-evasion
+  T1134.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    name: Token Impersonation/Theft
+    tactic: defense-evasion
+  T1134.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    name: Create Process with Token
+    tactic: defense-evasion
+  T1134.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    name: Make and Impersonate Token
+    tactic: defense-evasion
+  T1134.004:
+    data_sources:
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Process: Process Metadata'
+    name: Parent PID Spoofing
+    tactic: defense-evasion
+  T1134.005:
+    data_sources:
+    - 'Active Directory: Active Directory Object Modification'
+    - 'Process: OS API Execution'
+    - 'User Account: User Account Metadata'
+    name: SID-History Injection
+    tactic: defense-evasion
+  T1135:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Network Share Discovery
+    tactic: discovery
+  T1136:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'User Account: User Account Creation'
+    name: Create Account
+    tactic: persistence
+  T1136.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'User Account: User Account Creation'
+    name: Local Account
+    tactic: persistence
+  T1136.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'User Account: User Account Creation'
+    name: Domain Account
+    tactic: persistence
+  T1136.003:
+    data_sources:
+    - 'User Account: User Account Creation'
+    name: Cloud Account
+    tactic: persistence
+  T1137:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Office Application Startup
+    tactic: persistence
+  T1137.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Office Template Macros
+    tactic: persistence
+  T1137.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Office Test
+    tactic: persistence
+  T1137.003:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Outlook Forms
+    tactic: persistence
+  T1137.004:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Outlook Home Page
+    tactic: persistence
+  T1137.005:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Outlook Rules
+    tactic: persistence
+  T1137.006:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Add-ins
+    tactic: persistence
+  T1138:
+    data_sources: []
+    name: Application Shimming
+    tactic: persistence
+  T1139:
+    data_sources: []
+    name: Bash History
+    tactic: credential-access
+  T1140:
+    data_sources:
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    name: Deobfuscate/Decode Files or Information
+    tactic: defense-evasion
+  T1141:
+    data_sources: []
+    name: Input Prompt
+    tactic: credential-access
+  T1142:
+    data_sources: []
+    name: Keychain
+    tactic: credential-access
+  T1143:
+    data_sources: []
+    name: Hidden Window
+    tactic: defense-evasion
+  T1144:
+    data_sources: []
+    name: Gatekeeper Bypass
+    tactic: defense-evasion
+  T1145:
+    data_sources: []
+    name: Private Keys
+    tactic: credential-access
+  T1146:
+    data_sources: []
+    name: Clear Command History
+    tactic: defense-evasion
+  T1147:
+    data_sources: []
+    name: Hidden Users
+    tactic: defense-evasion
+  T1148:
+    data_sources: []
+    name: HISTCONTROL
+    tactic: defense-evasion
+  T1149:
+    data_sources: []
+    name: LC_MAIN Hijacking
+    tactic: defense-evasion
+  T1150:
+    data_sources: []
+    name: Plist Modification
+    tactic: defense-evasion
+  T1151:
+    data_sources: []
+    name: Space after Filename
+    tactic: defense-evasion
+  T1152:
+    data_sources: []
+    name: Launchctl
+    tactic: defense-evasion
+  T1153:
+    data_sources: []
+    name: Source
+    tactic: execution
+  T1154:
+    data_sources: []
+    name: Trap
+    tactic: execution
+  T1155:
+    data_sources: []
+    name: AppleScript
+    tactic: execution
+  T1156:
+    data_sources: []
+    name: Malicious Shell Modification
+    tactic: persistence
+  T1157:
+    data_sources: []
+    name: Dylib Hijacking
+    tactic: persistence
+  T1158:
+    data_sources: []
+    name: Hidden Files and Directories
+    tactic: defense-evasion
+  T1159:
+    data_sources: []
+    name: Launch Agent
+    tactic: persistence
+  T1160:
+    data_sources: []
+    name: Launch Daemon
+    tactic: persistence
+  T1161:
+    data_sources: []
+    name: LC_LOAD_DYLIB Addition
+    tactic: persistence
+  T1162:
+    data_sources: []
+    name: Login Item
+    tactic: persistence
+  T1163:
+    data_sources: []
+    name: Rc.common
+    tactic: persistence
+  T1164:
+    data_sources: []
+    name: Re-opened Applications
+    tactic: persistence
+  T1165:
+    data_sources: []
+    name: Startup Items
+    tactic: persistence
+  T1166:
+    data_sources: []
+    name: Setuid and Setgid
+    tactic: privilege-escalation
+  T1167:
+    data_sources: []
+    name: Securityd Memory
+    tactic: credential-access
+  T1168:
+    data_sources: []
+    name: Local Job Scheduling
+    tactic: persistence
+  T1169:
+    data_sources: []
+    name: Sudo
+    tactic: privilege-escalation
+  T1170:
+    data_sources: []
+    name: Mshta
+    tactic: defense-evasion
+  T1171:
+    data_sources: []
+    name: LLMNR/NBT-NS Poisoning and Relay
+    tactic: credential-access
+  T1172:
+    data_sources: []
+    name: Domain Fronting
+    tactic: command-and-control
+  T1173:
+    data_sources: []
+    name: Dynamic Data Exchange
+    tactic: execution
+  T1174:
+    data_sources: []
+    name: Password Filter DLL
+    tactic: credential-access
+  T1175:
+    data_sources: []
+    name: Component Object Model and Distributed COM
+    tactic: lateral-movement
+  T1176:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Creation'
+    name: Browser Extensions
+    tactic: persistence
+  T1177:
+    data_sources: []
+    name: LSASS Driver
+    tactic: execution
+  T1178:
+    data_sources: []
+    name: SID-History Injection
+    tactic: privilege-escalation
+  T1179:
+    data_sources: []
+    name: Hooking
+    tactic: persistence
+  T1180:
+    data_sources: []
+    name: Screensaver
+    tactic: persistence
+  T1181:
+    data_sources: []
+    name: Extra Window Memory Injection
+    tactic: defense-evasion
+  T1182:
+    data_sources: []
+    name: AppCert DLLs
+    tactic: persistence
+  T1183:
+    data_sources: []
+    name: Image File Execution Options Injection
+    tactic: privilege-escalation
+  T1184:
+    data_sources: []
+    name: SSH Hijacking
+    tactic: lateral-movement
+  T1185:
+    data_sources:
+    - 'Logon Session: Logon Session Creation'
+    - 'Process: Process Access'
+    - 'Process: Process Modification'
+    name: Browser Session Hijacking
+    tactic: collection
+  T1186:
+    data_sources: []
+    name: Process Doppelgänging
+    tactic: defense-evasion
+  T1187:
+    data_sources:
+    - 'File: File Access'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Forced Authentication
+    tactic: credential-access
+  T1188:
+    data_sources: []
+    name: Multi-hop Proxy
+    tactic: command-and-control
+  T1189:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'File: File Creation'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Process: Process Creation'
+    name: Drive-by Compromise
+    tactic: initial-access
+  T1190:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Network Traffic: Network Traffic Content'
+    name: Exploit Public-Facing Application
+    tactic: initial-access
+  T1191:
+    data_sources: []
+    name: CMSTP
+    tactic: defense-evasion
+  T1192:
+    data_sources: []
+    name: Spearphishing Link
+    tactic: initial-access
+  T1193:
+    data_sources: []
+    name: Spearphishing Attachment
+    tactic: initial-access
+  T1194:
+    data_sources: []
+    name: Spearphishing via Service
+    tactic: initial-access
+  T1195:
+    data_sources:
+    - 'File: File Metadata'
+    - 'Sensor Health: Host Status'
+    name: Supply Chain Compromise
+    tactic: initial-access
+  T1195.001:
+    data_sources:
+    - 'File: File Metadata'
+    name: Compromise Software Dependencies and Development Tools
+    tactic: initial-access
+  T1195.002:
+    data_sources:
+    - 'File: File Metadata'
+    name: Compromise Software Supply Chain
+    tactic: initial-access
+  T1195.003:
+    data_sources:
+    - 'Sensor Health: Host Status'
+    name: Compromise Hardware Supply Chain
+    tactic: initial-access
+  T1196:
+    data_sources: []
+    name: Control Panel Items
+    tactic: defense-evasion
+  T1197:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Process: Process Creation'
+    - 'Service: Service Metadata'
+    name: BITS Jobs
+    tactic: defense-evasion
+  T1198:
+    data_sources: []
+    name: SIP and Trust Provider Hijacking
+    tactic: defense-evasion
+  T1199:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Logon Session: Logon Session Creation'
+    - 'Logon Session: Logon Session Metadata'
+    - 'Network Traffic: Network Traffic Content'
+    name: Trusted Relationship
+    tactic: initial-access
+  T1200:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Drive: Drive Creation'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Hardware Additions
+    tactic: initial-access
+  T1201:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'User Account: User Account Metadata'
+    name: Password Policy Discovery
+    tactic: discovery
+  T1202:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Indirect Command Execution
+    tactic: defense-evasion
+  T1203:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Process: Process Creation'
+    name: Exploitation for Client Execution
+    tactic: execution
+  T1204:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'Container: Container Creation'
+    - 'Container: Container Start'
+    - 'File: File Creation'
+    - 'Image: Image Creation'
+    - 'Instance: Instance Creation'
+    - 'Instance: Instance Start'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Process: Process Creation'
+    name: User Execution
+    tactic: execution
+  T1204.001:
+    data_sources:
+    - 'File: File Creation'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    name: Malicious Link
+    tactic: execution
+  T1204.002:
+    data_sources:
+    - 'File: File Creation'
+    - 'Process: Process Creation'
+    name: Malicious File
+    tactic: execution
+  T1204.003:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'Container: Container Creation'
+    - 'Container: Container Start'
+    - 'Image: Image Creation'
+    - 'Instance: Instance Creation'
+    - 'Instance: Instance Start'
+    name: Malicious Image
+    tactic: execution
+  T1205:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: Process Creation'
+    name: Traffic Signaling
+    tactic: defense-evasion
+  T1205.001:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Port Knocking
+    tactic: defense-evasion
+  T1205.002:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Process: Process Creation'
+    name: Socket Filters
+    tactic: defense-evasion
+  T1206:
+    data_sources: []
+    name: Sudo Caching
+    tactic: privilege-escalation
+  T1207:
+    data_sources:
+    - 'Active Directory: Active Directory Object Creation'
+    - 'Active Directory: Active Directory Object Modification'
+    - 'Network Traffic: Network Traffic Content'
+    - 'User Account: User Account Authentication'
+    name: Rogue Domain Controller
+    tactic: defense-evasion
+  T1208:
+    data_sources: []
+    name: Kerberoasting
+    tactic: credential-access
+  T1209:
+    data_sources: []
+    name: Time Providers
+    tactic: persistence
+  T1210:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Network Traffic: Network Traffic Content'
+    name: Exploitation of Remote Services
+    tactic: lateral-movement
+  T1211:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Process: Process Creation'
+    name: Exploitation for Defense Evasion
+    tactic: defense-evasion
+  T1212:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Process: Process Creation'
+    - 'User Account: User Account Authentication'
+    name: Exploitation for Credential Access
+    tactic: credential-access
+  T1213:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Logon Session: Logon Session Creation'
+    name: Data from Information Repositories
+    tactic: collection
+  T1213.001:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Logon Session: Logon Session Creation'
+    name: Confluence
+    tactic: collection
+  T1213.002:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Logon Session: Logon Session Creation'
+    name: Sharepoint
+    tactic: collection
+  T1213.003:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Logon Session: Logon Session Creation'
+    name: Code Repositories
+    tactic: collection
+  T1214:
+    data_sources: []
+    name: Credentials in Registry
+    tactic: credential-access
+  T1215:
+    data_sources: []
+    name: Kernel Modules and Extensions
+    tactic: persistence
+  T1216:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    name: System Script Proxy Execution
+    tactic: defense-evasion
+  T1216.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    name: PubPrn
+    tactic: defense-evasion
+  T1216.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    name: SyncAppvPublishingServer
+    tactic: defense-evasion
+  T1217:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Process: Process Creation'
+    name: Browser Information Discovery
+    tactic: discovery
+  T1218:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'Module: Module Load'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: System Binary Proxy Execution
+    tactic: defense-evasion
+  T1218.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'Process: Process Creation'
+    name: Compiled HTML File
+    tactic: defense-evasion
+  T1218.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'Module: Module Load'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Control Panel
+    tactic: defense-evasion
+  T1218.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Process: Process Creation'
+    name: CMSTP
+    tactic: defense-evasion
+  T1218.004:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: InstallUtil
+    tactic: defense-evasion
+  T1218.005:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Process: Process Creation'
+    name: Mshta
+    tactic: defense-evasion
+  T1218.007:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Module: Module Load'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Process: Process Creation'
+    name: Msiexec
+    tactic: defense-evasion
+  T1218.008:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    name: Odbcconf
+    tactic: defense-evasion
+  T1218.009:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Regsvcs/Regasm
+    tactic: defense-evasion
+  T1218.010:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Module: Module Load'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Process: Process Creation'
+    name: Regsvr32
+    tactic: defense-evasion
+  T1218.011:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Metadata'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    name: Rundll32
+    tactic: defense-evasion
+  T1218.012:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Verclsid
+    tactic: defense-evasion
+  T1218.013:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Mavinject
+    tactic: defense-evasion
+  T1218.014:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'Process: Process Creation'
+    name: MMC
+    tactic: defense-evasion
+  T1218.015:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Electron Applications
+    tactic: defense-evasion
+  T1219:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: Process Creation'
+    name: Remote Access Software
+    tactic: command-and-control
+  T1220:
+    data_sources:
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    name: XSL Script Processing
+    tactic: defense-evasion
+  T1221:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Process: Process Creation'
+    name: Template Injection
+    tactic: defense-evasion
+  T1222:
+    data_sources:
+    - 'Active Directory: Active Directory Object Modification'
+    - 'Command: Command Execution'
+    - 'File: File Metadata'
+    - 'Process: Process Creation'
+    name: File and Directory Permissions Modification
+    tactic: defense-evasion
+  T1222.001:
+    data_sources:
+    - 'Active Directory: Active Directory Object Modification'
+    - 'Command: Command Execution'
+    - 'File: File Metadata'
+    - 'Process: Process Creation'
+    name: Windows File and Directory Permissions Modification
+    tactic: defense-evasion
+  T1222.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Metadata'
+    - 'Process: Process Creation'
+    name: Linux and Mac File and Directory Permissions Modification
+    tactic: defense-evasion
+  T1223:
+    data_sources: []
+    name: Compiled HTML File
+    tactic: defense-evasion
+  T1480:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Execution Guardrails
+    tactic: defense-evasion
+  T1480.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Environmental Keying
+    tactic: defense-evasion
+  T1482:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    name: Domain Trust Discovery
+    tactic: discovery
+  T1483:
+    data_sources: []
+    name: Domain Generation Algorithms
+    tactic: command-and-control
+  T1484:
+    data_sources:
+    - 'Active Directory: Active Directory Object Creation'
+    - 'Active Directory: Active Directory Object Deletion'
+    - 'Active Directory: Active Directory Object Modification'
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    name: Domain or Tenant Policy Modification
+    tactic: defense-evasion
+  T1484.001:
+    data_sources:
+    - 'Active Directory: Active Directory Object Creation'
+    - 'Active Directory: Active Directory Object Deletion'
+    - 'Active Directory: Active Directory Object Modification'
+    - 'Command: Command Execution'
+    name: Group Policy Modification
+    tactic: defense-evasion
+  T1484.002:
+    data_sources:
+    - 'Active Directory: Active Directory Object Creation'
+    - 'Active Directory: Active Directory Object Modification'
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    name: Trust Modification
+    tactic: defense-evasion
+  T1485:
+    data_sources:
+    - 'Cloud Storage: Cloud Storage Deletion'
+    - 'Command: Command Execution'
+    - 'File: File Deletion'
+    - 'File: File Modification'
+    - 'Image: Image Deletion'
+    - 'Instance: Instance Deletion'
+    - 'Process: Process Creation'
+    - 'Snapshot: Snapshot Deletion'
+    - 'Volume: Volume Deletion'
+    name: Data Destruction
+    tactic: impact
+  T1486:
+    data_sources:
+    - 'Cloud Storage: Cloud Storage Modification'
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Network Share: Network Share Access'
+    - 'Process: Process Creation'
+    name: Data Encrypted for Impact
+    tactic: impact
+  T1487:
+    data_sources: []
+    name: Disk Structure Wipe
+    tactic: impact
+  T1488:
+    data_sources: []
+    name: Disk Content Wipe
+    tactic: impact
+  T1489:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Process: Process Termination'
+    - 'Service: Service Metadata'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Service Stop
+    tactic: impact
+  T1490:
+    data_sources:
+    - 'Cloud Storage: Cloud Storage Deletion'
+    - 'Command: Command Execution'
+    - 'File: File Deletion'
+    - 'Process: Process Creation'
+    - 'Service: Service Metadata'
+    - 'Snapshot: Snapshot Deletion'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Inhibit System Recovery
+    tactic: impact
+  T1491:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Network Traffic: Network Traffic Content'
+    name: Defacement
+    tactic: impact
+  T1491.001:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Network Traffic: Network Traffic Content'
+    name: Internal Defacement
+    tactic: impact
+  T1491.002:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Network Traffic: Network Traffic Content'
+    name: External Defacement
+    tactic: impact
+  T1492:
+    data_sources: []
+    name: Stored Data Manipulation
+    tactic: impact
+  T1493:
+    data_sources: []
+    name: Transmitted Data Manipulation
+    tactic: impact
+  T1494:
+    data_sources: []
+    name: Runtime Data Manipulation
+    tactic: impact
+  T1495:
+    data_sources:
+    - 'Firmware: Firmware Modification'
+    name: Firmware Corruption
+    tactic: impact
+  T1496:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: Process Creation'
+    - 'Sensor Health: Host Status'
+    name: Resource Hijacking
+    tactic: impact
+  T1497:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Virtualization/Sandbox Evasion
+    tactic: defense-evasion
+  T1497.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: System Checks
+    tactic: defense-evasion
+  T1497.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: User Activity Based Checks
+    tactic: defense-evasion
+  T1497.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Time Based Evasion
+    tactic: defense-evasion
+  T1498:
+    data_sources:
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Sensor Health: Host Status'
+    name: Network Denial of Service
+    tactic: impact
+  T1498.001:
+    data_sources:
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Sensor Health: Host Status'
+    name: Direct Network Flood
+    tactic: impact
+  T1498.002:
+    data_sources:
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Sensor Health: Host Status'
+    name: Reflection Amplification
+    tactic: impact
+  T1499:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Sensor Health: Host Status'
+    name: Endpoint Denial of Service
+    tactic: impact
+  T1499.001:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Sensor Health: Host Status'
+    name: OS Exhaustion Flood
+    tactic: impact
+  T1499.002:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Sensor Health: Host Status'
+    name: Service Exhaustion Flood
+    tactic: impact
+  T1499.003:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Sensor Health: Host Status'
+    name: Application Exhaustion Flood
+    tactic: impact
+  T1499.004:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Sensor Health: Host Status'
+    name: Application or System Exploitation
+    tactic: impact
+  T1500:
+    data_sources: []
+    name: Compile After Delivery
+    tactic: defense-evasion
+  T1501:
+    data_sources: []
+    name: Systemd Service
+    tactic: persistence
+  T1502:
+    data_sources: []
+    name: Parent PID Spoofing
+    tactic: defense-evasion
+  T1503:
+    data_sources: []
+    name: Credentials from Web Browsers
+    tactic: credential-access
+  T1504:
+    data_sources: []
+    name: PowerShell Profile
+    tactic: persistence
+  T1505:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: Process Creation'
+    name: Server Software Component
+    tactic: persistence
+  T1505.001:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    name: SQL Stored Procedures
+    tactic: persistence
+  T1505.002:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'File: File Creation'
+    name: Transport Agent
+    tactic: persistence
+  T1505.003:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: Process Creation'
+    name: Web Shell
+    tactic: persistence
+  T1505.004:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    name: IIS Components
+    tactic: persistence
+  T1505.005:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Terminal Services DLL
+    tactic: persistence
+  T1506:
+    data_sources: []
+    name: Web Session Cookie
+    tactic: defense-evasion
+  T1514:
+    data_sources: []
+    name: Elevated Execution with Prompt
+    tactic: privilege-escalation
+  T1518:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Firewall: Firewall Enumeration'
+    - 'Firewall: Firewall Metadata'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Software Discovery
+    tactic: discovery
+  T1518.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Firewall: Firewall Enumeration'
+    - 'Firewall: Firewall Metadata'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Security Software Discovery
+    tactic: discovery
+  T1519:
+    data_sources: []
+    name: Emond
+    tactic: persistence
+  T1522:
+    data_sources: []
+    name: Cloud Instance Metadata API
+    tactic: credential-access
+  T1525:
+    data_sources:
+    - 'Image: Image Creation'
+    - 'Image: Image Metadata'
+    - 'Image: Image Modification'
+    name: Implant Internal Image
+    tactic: persistence
+  T1526:
+    data_sources:
+    - 'Cloud Service: Cloud Service Enumeration'
+    name: Cloud Service Discovery
+    tactic: discovery
+  T1527:
+    data_sources: []
+    name: Application Access Token
+    tactic: defense-evasion
+  T1528:
+    data_sources:
+    - 'Active Directory: Active Directory Object Modification'
+    - 'User Account: User Account Modification'
+    name: Steal Application Access Token
+    tactic: credential-access
+  T1529:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Sensor Health: Host Status'
+    name: System Shutdown/Reboot
+    tactic: impact
+  T1530:
+    data_sources:
+    - 'Cloud Storage: Cloud Storage Access'
+    name: Data from Cloud Storage
+    tactic: collection
+  T1531:
+    data_sources:
+    - 'Active Directory: Active Directory Object Modification'
+    - 'User Account: User Account Deletion'
+    - 'User Account: User Account Modification'
+    name: Account Access Removal
+    tactic: impact
+  T1534:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Internal Spearphishing
+    tactic: lateral-movement
+  T1535:
+    data_sources:
+    - 'Instance: Instance Creation'
+    - 'Instance: Instance Metadata'
+    name: Unused/Unsupported Cloud Regions
+    tactic: defense-evasion
+  T1536:
+    data_sources: []
+    name: Revert Cloud Instance
+    tactic: defense-evasion
+  T1537:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Cloud Storage: Cloud Storage Creation'
+    - 'Cloud Storage: Cloud Storage Metadata'
+    - 'Cloud Storage: Cloud Storage Modification'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Snapshot: Snapshot Creation'
+    - 'Snapshot: Snapshot Metadata'
+    - 'Snapshot: Snapshot Modification'
+    name: Transfer Data to Cloud Account
+    tactic: exfiltration
+  T1538:
+    data_sources:
+    - 'Logon Session: Logon Session Creation'
+    - 'User Account: User Account Authentication'
+    name: Cloud Service Dashboard
+    tactic: discovery
+  T1539:
+    data_sources:
+    - 'File: File Access'
+    - 'Process: Process Access'
+    name: Steal Web Session Cookie
+    tactic: credential-access
+  T1542:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Drive: Drive Modification'
+    - 'Driver: Driver Metadata'
+    - 'Firmware: Firmware Modification'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Process: OS API Execution'
+    name: Pre-OS Boot
+    tactic: defense-evasion
+  T1542.001:
+    data_sources:
+    - 'Firmware: Firmware Modification'
+    name: System Firmware
+    tactic: persistence
+  T1542.002:
+    data_sources:
+    - 'Driver: Driver Metadata'
+    - 'Firmware: Firmware Modification'
+    - 'Process: OS API Execution'
+    name: Component Firmware
+    tactic: persistence
+  T1542.003:
+    data_sources:
+    - 'Drive: Drive Modification'
+    name: Bootkit
+    tactic: persistence
+  T1542.004:
+    data_sources:
+    - 'Firmware: Firmware Modification'
+    name: ROMMONkit
+    tactic: defense-evasion
+  T1542.005:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Firmware: Firmware Modification'
+    - 'Network Traffic: Network Connection Creation'
+    name: TFTP Boot
+    tactic: defense-evasion
+  T1543:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Container: Container Creation'
+    - 'Driver: Driver Load'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Service: Service Creation'
+    - 'Service: Service Modification'
+    - 'Windows Registry: Windows Registry Key Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Create or Modify System Process
+    tactic: persistence
+  T1543.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Service: Service Creation'
+    - 'Service: Service Modification'
+    name: Launch Agent
+    tactic: persistence
+  T1543.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Service: Service Creation'
+    - 'Service: Service Modification'
+    name: Systemd Service
+    tactic: persistence
+  T1543.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Driver: Driver Load'
+    - 'File: File Metadata'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Service: Service Creation'
+    - 'Service: Service Modification'
+    - 'Windows Registry: Windows Registry Key Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Windows Service
+    tactic: persistence
+  T1543.004:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Service: Service Creation'
+    - 'Service: Service Modification'
+    name: Launch Daemon
+    tactic: persistence
+  T1543.005:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Container: Container Creation'
+    name: Container Service
+    tactic: persistence
+  T1546:
+    data_sources:
+    - 'Cloud Service: Cloud Service Modification'
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Metadata'
+    - 'File: File Modification'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'WMI: WMI Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Event Triggered Execution
+    tactic: privilege-escalation
+  T1546.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Change Default File Association
+    tactic: privilege-escalation
+  T1546.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Screensaver
+    tactic: privilege-escalation
+  T1546.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'Process: Process Creation'
+    - 'WMI: WMI Creation'
+    name: Windows Management Instrumentation Event Subscription
+    tactic: privilege-escalation
+  T1546.004:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: Unix Shell Configuration Modification
+    tactic: privilege-escalation
+  T1546.005:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: Trap
+    tactic: privilege-escalation
+  T1546.006:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Metadata'
+    - 'File: File Modification'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    name: LC_LOAD_DYLIB Addition
+    tactic: privilege-escalation
+  T1546.007:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Netsh Helper DLL
+    tactic: privilege-escalation
+  T1546.008:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Accessibility Features
+    tactic: privilege-escalation
+  T1546.009:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Module: Module Load'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: AppCert DLLs
+    tactic: privilege-escalation
+  T1546.010:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Module: Module Load'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: AppInit DLLs
+    tactic: privilege-escalation
+  T1546.011:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Application Shimming
+    tactic: privilege-escalation
+  T1546.012:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Image File Execution Options Injection
+    tactic: privilege-escalation
+  T1546.013:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: PowerShell Profile
+    tactic: privilege-escalation
+  T1546.014:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: Emond
+    tactic: privilege-escalation
+  T1546.015:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Component Object Model Hijacking
+    tactic: privilege-escalation
+  T1546.016:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'Process: Process Creation'
+    name: Installer Packages
+    tactic: privilege-escalation
+  T1547:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Driver: Driver Load'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Kernel: Kernel Module Load'
+    - 'Module: Module Load'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Boot or Logon Autostart Execution
+    tactic: persistence
+  T1547.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Registry Run Keys / Startup Folder
+    tactic: persistence
+  T1547.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Module: Module Load'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Authentication Package
+    tactic: persistence
+  T1547.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Time Providers
+    tactic: persistence
+  T1547.004:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Winlogon Helper DLL
+    tactic: persistence
+  T1547.005:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Module: Module Load'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Security Support Provider
+    tactic: persistence
+  T1547.006:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Kernel: Kernel Module Load'
+    - 'Process: Process Creation'
+    name: Kernel Modules and Extensions
+    tactic: persistence
+  T1547.007:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    name: Re-opened Applications
+    tactic: persistence
+  T1547.008:
+    data_sources:
+    - 'Driver: Driver Load'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Module: Module Load'
+    name: LSASS Driver
+    tactic: persistence
+  T1547.009:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: Shortcut Modification
+    tactic: persistence
+  T1547.010:
+    data_sources:
+    - 'File: File Creation'
+    - 'Module: Module Load'
+    - 'Process: OS API Execution'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Port Monitors
+    tactic: persistence
+  T1547.011:
+    data_sources: []
+    name: Plist Modification
+    tactic: persistence
+  T1547.012:
+    data_sources:
+    - 'Driver: Driver Load'
+    - 'File: File Creation'
+    - 'Module: Module Load'
+    - 'Process: OS API Execution'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Print Processors
+    tactic: persistence
+  T1547.013:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: XDG Autostart Entries
+    tactic: persistence
+  T1547.014:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Active Setup
+    tactic: persistence
+  T1547.015:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: Login Items
+    tactic: persistence
+  T1548:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Metadata'
+    - 'File: File Modification'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Process: Process Metadata'
+    - 'User Account: User Account Modification'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Abuse Elevation Control Mechanism
+    tactic: privilege-escalation
+  T1548.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Metadata'
+    - 'File: File Modification'
+    name: Setuid and Setgid
+    tactic: privilege-escalation
+  T1548.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Process: Process Metadata'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Bypass User Account Control
+    tactic: privilege-escalation
+  T1548.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Process: Process Metadata'
+    name: Sudo and Sudo Caching
+    tactic: privilege-escalation
+  T1548.004:
+    data_sources:
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Elevated Execution with Prompt
+    tactic: privilege-escalation
+  T1548.005:
+    data_sources:
+    - 'User Account: User Account Modification'
+    name: Temporary Elevated Cloud Access
+    tactic: privilege-escalation
+  T1548.006:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: TCC Manipulation
+    tactic: defense-evasion
+  T1550:
+    data_sources:
+    - 'Active Directory: Active Directory Credential Request'
+    - 'Application Log: Application Log Content'
+    - 'Logon Session: Logon Session Creation'
+    - 'User Account: User Account Authentication'
+    - 'Web Credential: Web Credential Usage'
+    name: Use Alternate Authentication Material
+    tactic: defense-evasion
+  T1550.001:
+    data_sources:
+    - 'Web Credential: Web Credential Usage'
+    name: Application Access Token
+    tactic: defense-evasion
+  T1550.002:
+    data_sources:
+    - 'Active Directory: Active Directory Credential Request'
+    - 'Logon Session: Logon Session Creation'
+    - 'User Account: User Account Authentication'
+    name: Pass the Hash
+    tactic: defense-evasion
+  T1550.003:
+    data_sources:
+    - 'Active Directory: Active Directory Credential Request'
+    - 'Logon Session: Logon Session Creation'
+    - 'User Account: User Account Authentication'
+    name: Pass the Ticket
+    tactic: defense-evasion
+  T1550.004:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Web Credential: Web Credential Usage'
+    name: Web Session Cookie
+    tactic: defense-evasion
+  T1552:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Process: Process Creation'
+    - 'User Account: User Account Authentication'
+    - 'Windows Registry: Windows Registry Key Access'
+    name: Unsecured Credentials
+    tactic: credential-access
+  T1552.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Process: Process Creation'
+    name: Credentials In Files
+    tactic: credential-access
+  T1552.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Access'
+    name: Credentials in Registry
+    tactic: credential-access
+  T1552.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    name: Bash History
+    tactic: credential-access
+  T1552.004:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    name: Private Keys
+    tactic: credential-access
+  T1552.005:
+    data_sources:
+    - 'User Account: User Account Authentication'
+    name: Cloud Instance Metadata API
+    tactic: credential-access
+  T1552.006:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    name: Group Policy Preferences
+    tactic: credential-access
+  T1552.007:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'User Account: User Account Authentication'
+    name: Container API
+    tactic: credential-access
+  T1552.008:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    name: Chat Messages
+    tactic: credential-access
+  T1553:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Metadata'
+    - 'File: File Modification'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Subvert Trust Controls
+    tactic: defense-evasion
+  T1553.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Metadata'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: Gatekeeper Bypass
+    tactic: defense-evasion
+  T1553.002:
+    data_sources:
+    - 'File: File Metadata'
+    name: Code Signing
+    tactic: defense-evasion
+  T1553.003:
+    data_sources:
+    - 'File: File Modification'
+    - 'Module: Module Load'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: SIP and Trust Provider Hijacking
+    tactic: defense-evasion
+  T1553.004:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Install Root Certificate
+    tactic: defense-evasion
+  T1553.005:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Metadata'
+    name: Mark-of-the-Web Bypass
+    tactic: defense-evasion
+  T1553.006:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Code Signing Policy Modification
+    tactic: defense-evasion
+  T1554:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Deletion'
+    - 'File: File Metadata'
+    - 'File: File Modification'
+    name: Compromise Host Software Binary
+    tactic: persistence
+  T1555:
+    data_sources:
+    - 'Cloud Service: Cloud Service Enumeration'
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Process: OS API Execution'
+    - 'Process: Process Access'
+    - 'Process: Process Creation'
+    name: Credentials from Password Stores
+    tactic: credential-access
+  T1555.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Keychain
+    tactic: credential-access
+  T1555.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Access'
+    name: Securityd Memory
+    tactic: credential-access
+  T1555.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Process: OS API Execution'
+    - 'Process: Process Access'
+    name: Credentials from Web Browsers
+    tactic: credential-access
+  T1555.004:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Windows Credential Manager
+    tactic: credential-access
+  T1555.005:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Process: OS API Execution'
+    - 'Process: Process Access'
+    name: Password Managers
+    tactic: credential-access
+  T1555.006:
+    data_sources:
+    - 'Cloud Service: Cloud Service Enumeration'
+    name: Cloud Secrets Management Stores
+    tactic: credential-access
+  T1556:
+    data_sources:
+    - 'Active Directory: Active Directory Object Modification'
+    - 'Application Log: Application Log Content'
+    - 'Cloud Service: Cloud Service Modification'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Logon Session: Logon Session Creation'
+    - 'Module: Module Load'
+    - 'Process: OS API Execution'
+    - 'Process: Process Access'
+    - 'User Account: User Account Authentication'
+    - 'User Account: User Account Modification'
+    - 'Windows Registry: Windows Registry Key Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Modify Authentication Process
+    tactic: credential-access
+  T1556.001:
+    data_sources:
+    - 'File: File Modification'
+    - 'Logon Session: Logon Session Creation'
+    - 'Process: OS API Execution'
+    - 'Process: Process Access'
+    name: Domain Controller Authentication
+    tactic: credential-access
+  T1556.002:
+    data_sources:
+    - 'File: File Creation'
+    - 'Module: Module Load'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Password Filter DLL
+    tactic: credential-access
+  T1556.003:
+    data_sources:
+    - 'File: File Modification'
+    - 'Logon Session: Logon Session Creation'
+    name: Pluggable Authentication Modules
+    tactic: credential-access
+  T1556.004:
+    data_sources:
+    - 'File: File Modification'
+    name: Network Device Authentication
+    tactic: credential-access
+  T1556.005:
+    data_sources:
+    - 'Active Directory: Active Directory Object Modification'
+    - 'Command: Command Execution'
+    - 'Script: Script Execution'
+    - 'User Account: User Account Metadata'
+    name: Reversible Encryption
+    tactic: credential-access
+  T1556.006:
+    data_sources:
+    - 'Active Directory: Active Directory Object Modification'
+    - 'Application Log: Application Log Content'
+    - 'Logon Session: Logon Session Creation'
+    - 'User Account: User Account Authentication'
+    - 'User Account: User Account Modification'
+    name: Multi-Factor Authentication
+    tactic: credential-access
+  T1556.007:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'File: File Modification'
+    - 'Logon Session: Logon Session Creation'
+    - 'Module: Module Load'
+    name: Hybrid Identity
+    tactic: credential-access
+  T1556.008:
+    data_sources:
+    - 'File: File Creation'
+    - 'Process: OS API Execution'
+    - 'Windows Registry: Windows Registry Key Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Network Provider DLL
+    tactic: credential-access
+  T1556.009:
+    data_sources:
+    - 'Active Directory: Active Directory Object Modification'
+    - 'Cloud Service: Cloud Service Modification'
+    name: Conditional Access Policies
+    tactic: credential-access
+  T1557:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Service: Service Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Adversary-in-the-Middle
+    tactic: credential-access
+  T1557.001:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Service: Service Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: LLMNR/NBT-NS Poisoning and SMB Relay
+    tactic: credential-access
+  T1557.002:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: ARP Cache Poisoning
+    tactic: credential-access
+  T1557.003:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: DHCP Spoofing
+    tactic: credential-access
+  T1558:
+    data_sources:
+    - 'Active Directory: Active Directory Credential Request'
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Logon Session: Logon Session Metadata'
+    name: Steal or Forge Kerberos Tickets
+    tactic: credential-access
+  T1558.001:
+    data_sources:
+    - 'Active Directory: Active Directory Credential Request'
+    - 'Logon Session: Logon Session Metadata'
+    name: Golden Ticket
+    tactic: credential-access
+  T1558.002:
+    data_sources:
+    - 'Logon Session: Logon Session Metadata'
+    name: Silver Ticket
+    tactic: credential-access
+  T1558.003:
+    data_sources:
+    - 'Active Directory: Active Directory Credential Request'
+    name: Kerberoasting
+    tactic: credential-access
+  T1558.004:
+    data_sources:
+    - 'Active Directory: Active Directory Credential Request'
+    name: AS-REP Roasting
+    tactic: credential-access
+  T1559:
+    data_sources:
+    - 'Module: Module Load'
+    - 'Process: Process Access'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    name: Inter-Process Communication
+    tactic: execution
+  T1559.001:
+    data_sources:
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    name: Component Object Model
+    tactic: execution
+  T1559.002:
+    data_sources:
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    name: Dynamic Data Exchange
+    tactic: execution
+  T1559.003:
+    data_sources:
+    - 'Process: Process Access'
+    name: XPC Services
+    tactic: execution
+  T1560:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    name: Archive Collected Data
+    tactic: collection
+  T1560.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'Process: Process Creation'
+    name: Archive via Utility
+    tactic: collection
+  T1560.002:
+    data_sources:
+    - 'File: File Creation'
+    - 'Script: Script Execution'
+    name: Archive via Library
+    tactic: collection
+  T1560.003:
+    data_sources:
+    - 'File: File Creation'
+    - 'Script: Script Execution'
+    name: Archive via Custom Method
+    tactic: collection
+  T1561:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Drive: Drive Access'
+    - 'Drive: Drive Modification'
+    - 'Driver: Driver Load'
+    - 'Process: Process Creation'
+    name: Disk Wipe
+    tactic: impact
+  T1561.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Drive: Drive Access'
+    - 'Drive: Drive Modification'
+    - 'Driver: Driver Load'
+    - 'Process: Process Creation'
+    name: Disk Content Wipe
+    tactic: impact
+  T1561.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Drive: Drive Access'
+    - 'Drive: Drive Modification'
+    - 'Driver: Driver Load'
+    - 'Process: Process Creation'
+    name: Disk Structure Wipe
+    tactic: impact
+  T1562:
+    data_sources:
+    - 'Cloud Service: Cloud Service Disable'
+    - 'Cloud Service: Cloud Service Modification'
+    - 'Command: Command Execution'
+    - 'Driver: Driver Load'
+    - 'File: File Deletion'
+    - 'File: File Modification'
+    - 'Firewall: Firewall Disable'
+    - 'Firewall: Firewall Rule Modification'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Process: Process Modification'
+    - 'Process: Process Termination'
+    - 'Script: Script Execution'
+    - 'Sensor Health: Host Status'
+    - 'Service: Service Metadata'
+    - 'User Account: User Account Modification'
+    - 'Windows Registry: Windows Registry Key Deletion'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Impair Defenses
+    tactic: defense-evasion
+  T1562.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Driver: Driver Load'
+    - 'Process: Process Creation'
+    - 'Process: Process Termination'
+    - 'Sensor Health: Host Status'
+    - 'Service: Service Metadata'
+    - 'Windows Registry: Windows Registry Key Deletion'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Disable or Modify Tools
+    tactic: defense-evasion
+  T1562.002:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    - 'Sensor Health: Host Status'
+    - 'Windows Registry: Windows Registry Key Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Disable Windows Event Logging
+    tactic: defense-evasion
+  T1562.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Sensor Health: Host Status'
+    name: Impair Command History Logging
+    tactic: defense-evasion
+  T1562.004:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Firewall: Firewall Disable'
+    - 'Firewall: Firewall Rule Modification'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Disable or Modify System Firewall
+    tactic: defense-evasion
+  T1562.006:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Sensor Health: Host Status'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Indicator Blocking
+    tactic: defense-evasion
+  T1562.007:
+    data_sources:
+    - 'Firewall: Firewall Disable'
+    - 'Firewall: Firewall Rule Modification'
+    name: Disable or Modify Cloud Firewall
+    tactic: defense-evasion
+  T1562.008:
+    data_sources:
+    - 'Cloud Service: Cloud Service Disable'
+    - 'Cloud Service: Cloud Service Modification'
+    - 'User Account: User Account Modification'
+    name: Disable or Modify Cloud Logs
+    tactic: defense-evasion
+  T1562.009:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Safe Mode Boot
+    tactic: defense-evasion
+  T1562.010:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Process: Process Metadata'
+    name: Downgrade Attack
+    tactic: defense-evasion
+  T1562.011:
+    data_sources:
+    - 'Process: Process Creation'
+    - 'Sensor Health: Host Status'
+    name: Spoof Security Alerting
+    tactic: defense-evasion
+  T1562.012:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Deletion'
+    - 'File: File Modification'
+    - 'Process: OS API Execution'
+    - 'Process: Process Modification'
+    name: Disable or Modify Linux Audit System
+    tactic: defense-evasion
+  T1563:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Logon Session: Logon Session Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: Process Creation'
+    name: Remote Service Session Hijacking
+    tactic: lateral-movement
+  T1563.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Logon Session: Logon Session Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: Process Creation'
+    name: SSH Hijacking
+    tactic: lateral-movement
+  T1563.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Logon Session: Logon Session Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: Process Creation'
+    name: RDP Hijacking
+    tactic: lateral-movement
+  T1564:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Metadata'
+    - 'File: File Modification'
+    - 'Firmware: Firmware Modification'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    - 'Service: Service Creation'
+    - 'User Account: User Account Creation'
+    - 'User Account: User Account Metadata'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Hide Artifacts
+    tactic: defense-evasion
+  T1564.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Metadata'
+    - 'Process: Process Creation'
+    name: Hidden Files and Directories
+    tactic: defense-evasion
+  T1564.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'User Account: User Account Creation'
+    - 'User Account: User Account Metadata'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Hidden Users
+    tactic: defense-evasion
+  T1564.003:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    name: Hidden Window
+    tactic: defense-evasion
+  T1564.004:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Metadata'
+    - 'File: File Modification'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: NTFS File Attributes
+    tactic: defense-evasion
+  T1564.005:
+    data_sources:
+    - 'File: File Modification'
+    - 'Firmware: Firmware Modification'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Hidden File System
+    tactic: defense-evasion
+  T1564.006:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'Image: Image Metadata'
+    - 'Process: Process Creation'
+    - 'Service: Service Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Run Virtual Instance
+    tactic: defense-evasion
+  T1564.007:
+    data_sources:
+    - 'File: File Metadata'
+    - 'Script: Script Execution'
+    name: VBA Stomping
+    tactic: defense-evasion
+  T1564.008:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    name: Email Hiding Rules
+    tactic: defense-evasion
+  T1564.009:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Metadata'
+    - 'Process: Process Creation'
+    name: Resource Forking
+    tactic: defense-evasion
+  T1564.010:
+    data_sources:
+    - 'Process: Process Creation'
+    name: Process Argument Spoofing
+    tactic: defense-evasion
+  T1564.011:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Ignore Process Interrupts
+    tactic: defense-evasion
+  T1564.012:
+    data_sources:
+    - 'File: File Creation'
+    name: File/Path Exclusions
+    tactic: defense-evasion
+  T1565:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Deletion'
+    - 'File: File Metadata'
+    - 'File: File Modification'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: OS API Execution'
+    name: Data Manipulation
+    tactic: impact
+  T1565.001:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Deletion'
+    - 'File: File Modification'
+    name: Stored Data Manipulation
+    tactic: impact
+  T1565.002:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: OS API Execution'
+    name: Transmitted Data Manipulation
+    tactic: impact
+  T1565.003:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Deletion'
+    - 'File: File Metadata'
+    - 'File: File Modification'
+    - 'Process: OS API Execution'
+    name: Runtime Data Manipulation
+    tactic: impact
+  T1566:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'File: File Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Phishing
+    tactic: initial-access
+  T1566.001:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'File: File Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Spearphishing Attachment
+    tactic: initial-access
+  T1566.002:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Spearphishing Link
+    tactic: initial-access
+  T1566.003:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Spearphishing via Service
+    tactic: initial-access
+  T1566.004:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    name: Spearphishing Voice
+    tactic: initial-access
+  T1567:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Exfiltration Over Web Service
+    tactic: exfiltration
+  T1567.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Exfiltration to Code Repository
+    tactic: exfiltration
+  T1567.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Exfiltration to Cloud Storage
+    tactic: exfiltration
+  T1567.003:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Exfiltration to Text Storage Sites
+    tactic: exfiltration
+  T1567.004:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Exfiltration Over Webhook
+    tactic: exfiltration
+  T1568:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Dynamic Resolution
+    tactic: command-and-control
+  T1568.001:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Fast Flux DNS
+    tactic: command-and-control
+  T1568.002:
+    data_sources:
+    - 'Network Traffic: Network Traffic Flow'
+    name: Domain Generation Algorithms
+    tactic: command-and-control
+  T1568.003:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    name: DNS Calculation
+    tactic: command-and-control
+  T1569:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Service: Service Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: System Services
+    tactic: execution
+  T1569.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Service: Service Creation'
+    name: Launchctl
+    tactic: execution
+  T1569.002:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: Process Creation'
+    - 'Service: Service Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Service Execution
+    tactic: execution
+  T1570:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Metadata'
+    - 'Named Pipe: Named Pipe Metadata'
+    - 'Network Share: Network Share Access'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    - 'Process: Process Creation'
+    name: Lateral Tool Transfer
+    tactic: lateral-movement
+  T1571:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Non-Standard Port
+    tactic: command-and-control
+  T1572:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Protocol Tunneling
+    tactic: command-and-control
+  T1573:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    name: Encrypted Channel
+    tactic: command-and-control
+  T1573.001:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    name: Symmetric Cryptography
+    tactic: command-and-control
+  T1573.002:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    name: Asymmetric Cryptography
+    tactic: command-and-control
+  T1574:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Service: Service Metadata'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Hijack Execution Flow
+    tactic: persistence
+  T1574.001:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Module: Module Load'
+    name: DLL Search Order Hijacking
+    tactic: persistence
+  T1574.002:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    name: DLL Side-Loading
+    tactic: persistence
+  T1574.004:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Module: Module Load'
+    name: Dylib Hijacking
+    tactic: persistence
+  T1574.005:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Service: Service Metadata'
+    name: Executable Installer File Permissions Weakness
+    tactic: persistence
+  T1574.006:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    name: Dynamic Linker Hijacking
+    tactic: persistence
+  T1574.007:
+    data_sources:
+    - 'File: File Creation'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Path Interception by PATH Environment Variable
+    tactic: persistence
+  T1574.008:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: Path Interception by Search Order Hijacking
+    tactic: persistence
+  T1574.009:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: Path Interception by Unquoted Path
+    tactic: persistence
+  T1574.010:
+    data_sources:
+    - 'File: File Creation'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    - 'Service: Service Metadata'
+    name: Services File Permissions Weakness
+    tactic: persistence
+  T1574.011:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Service: Service Modification'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: Services Registry Permissions Weakness
+    tactic: persistence
+  T1574.012:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Modification'
+    name: COR_PROFILER
+    tactic: persistence
+  T1574.013:
+    data_sources:
+    - 'Process: OS API Execution'
+    name: KernelCallbackTable
+    tactic: persistence
+  T1574.014:
+    data_sources:
+    - 'File: File Creation'
+    - 'Module: Module Load'
+    - 'Process: Process Creation'
+    name: AppDomainManager
+    tactic: persistence
+  T1578:
+    data_sources:
+    - 'Cloud Service: Cloud Service Metadata'
+    - 'Instance: Instance Creation'
+    - 'Instance: Instance Deletion'
+    - 'Instance: Instance Metadata'
+    - 'Instance: Instance Modification'
+    - 'Instance: Instance Start'
+    - 'Instance: Instance Stop'
+    - 'Snapshot: Snapshot Creation'
+    - 'Snapshot: Snapshot Deletion'
+    - 'Snapshot: Snapshot Metadata'
+    - 'Snapshot: Snapshot Modification'
+    - 'Volume: Volume Creation'
+    - 'Volume: Volume Deletion'
+    - 'Volume: Volume Metadata'
+    - 'Volume: Volume Modification'
+    name: Modify Cloud Compute Infrastructure
+    tactic: defense-evasion
+  T1578.001:
+    data_sources:
+    - 'Snapshot: Snapshot Creation'
+    - 'Snapshot: Snapshot Metadata'
+    name: Create Snapshot
+    tactic: defense-evasion
+  T1578.002:
+    data_sources:
+    - 'Instance: Instance Creation'
+    - 'Instance: Instance Metadata'
+    name: Create Cloud Instance
+    tactic: defense-evasion
+  T1578.003:
+    data_sources:
+    - 'Instance: Instance Deletion'
+    - 'Instance: Instance Metadata'
+    name: Delete Cloud Instance
+    tactic: defense-evasion
+  T1578.004:
+    data_sources:
+    - 'Instance: Instance Metadata'
+    - 'Instance: Instance Modification'
+    - 'Instance: Instance Start'
+    - 'Instance: Instance Stop'
+    name: Revert Cloud Instance
+    tactic: defense-evasion
+  T1578.005:
+    data_sources:
+    - 'Cloud Service: Cloud Service Modification'
+    name: Modify Cloud Compute Configurations
+    tactic: defense-evasion
+  T1580:
+    data_sources:
+    - 'Cloud Storage: Cloud Storage Enumeration'
+    - 'Instance: Instance Enumeration'
+    - 'Snapshot: Snapshot Enumeration'
+    - 'Volume: Volume Enumeration'
+    name: Cloud Infrastructure Discovery
+    tactic: discovery
+  T1583:
+    data_sources:
+    - 'Domain Name: Active DNS'
+    - 'Domain Name: Domain Registration'
+    - 'Domain Name: Passive DNS'
+    - 'Internet Scan: Response Content'
+    - 'Internet Scan: Response Metadata'
+    name: Acquire Infrastructure
+    tactic: resource-development
+  T1583.001:
+    data_sources:
+    - 'Domain Name: Active DNS'
+    - 'Domain Name: Domain Registration'
+    - 'Domain Name: Passive DNS'
+    name: Domains
+    tactic: resource-development
+  T1583.002:
+    data_sources: []
+    name: DNS Server
+    tactic: resource-development
+  T1583.003:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    - 'Internet Scan: Response Metadata'
+    name: Virtual Private Server
+    tactic: resource-development
+  T1583.004:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    - 'Internet Scan: Response Metadata'
+    name: Server
+    tactic: resource-development
+  T1583.005:
+    data_sources: []
+    name: Botnet
+    tactic: resource-development
+  T1583.006:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: Web Services
+    tactic: resource-development
+  T1583.007:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: Serverless
+    tactic: resource-development
+  T1583.008:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: Malvertising
+    tactic: resource-development
+  T1584:
+    data_sources:
+    - 'Domain Name: Active DNS'
+    - 'Domain Name: Domain Registration'
+    - 'Domain Name: Passive DNS'
+    - 'Internet Scan: Response Content'
+    - 'Internet Scan: Response Metadata'
+    name: Compromise Infrastructure
+    tactic: resource-development
+  T1584.001:
+    data_sources:
+    - 'Domain Name: Active DNS'
+    - 'Domain Name: Domain Registration'
+    - 'Domain Name: Passive DNS'
+    name: Domains
+    tactic: resource-development
+  T1584.002:
+    data_sources:
+    - 'Domain Name: Active DNS'
+    - 'Domain Name: Passive DNS'
+    name: DNS Server
+    tactic: resource-development
+  T1584.003:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    - 'Internet Scan: Response Metadata'
+    name: Virtual Private Server
+    tactic: resource-development
+  T1584.004:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    - 'Internet Scan: Response Metadata'
+    name: Server
+    tactic: resource-development
+  T1584.005:
+    data_sources: []
+    name: Botnet
+    tactic: resource-development
+  T1584.006:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: Web Services
+    tactic: resource-development
+  T1584.007:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: Serverless
+    tactic: resource-development
+  T1584.008:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: Network Devices
+    tactic: resource-development
+  T1585:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Persona: Social Media'
+    name: Establish Accounts
+    tactic: resource-development
+  T1585.001:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Persona: Social Media'
+    name: Social Media Accounts
+    tactic: resource-development
+  T1585.002:
+    data_sources: []
+    name: Email Accounts
+    tactic: resource-development
+  T1585.003:
+    data_sources: []
+    name: Cloud Accounts
+    tactic: resource-development
+  T1586:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Persona: Social Media'
+    name: Compromise Accounts
+    tactic: resource-development
+  T1586.001:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Persona: Social Media'
+    name: Social Media Accounts
+    tactic: resource-development
+  T1586.002:
+    data_sources: []
+    name: Email Accounts
+    tactic: resource-development
+  T1586.003:
+    data_sources: []
+    name: Cloud Accounts
+    tactic: resource-development
+  T1587:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    - 'Malware Repository: Malware Content'
+    - 'Malware Repository: Malware Metadata'
+    name: Develop Capabilities
+    tactic: resource-development
+  T1587.001:
+    data_sources:
+    - 'Malware Repository: Malware Content'
+    - 'Malware Repository: Malware Metadata'
+    name: Malware
+    tactic: resource-development
+  T1587.002:
+    data_sources:
+    - 'Malware Repository: Malware Metadata'
+    name: Code Signing Certificates
+    tactic: resource-development
+  T1587.003:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: Digital Certificates
+    tactic: resource-development
+  T1587.004:
+    data_sources: []
+    name: Exploits
+    tactic: resource-development
+  T1588:
+    data_sources:
+    - 'Certificate: Certificate Registration'
+    - 'Internet Scan: Response Content'
+    - 'Malware Repository: Malware Content'
+    - 'Malware Repository: Malware Metadata'
+    name: Obtain Capabilities
+    tactic: resource-development
+  T1588.001:
+    data_sources:
+    - 'Malware Repository: Malware Content'
+    - 'Malware Repository: Malware Metadata'
+    name: Malware
+    tactic: resource-development
+  T1588.002:
+    data_sources:
+    - 'Malware Repository: Malware Metadata'
+    name: Tool
+    tactic: resource-development
+  T1588.003:
+    data_sources:
+    - 'Malware Repository: Malware Metadata'
+    name: Code Signing Certificates
+    tactic: resource-development
+  T1588.004:
+    data_sources:
+    - 'Certificate: Certificate Registration'
+    - 'Internet Scan: Response Content'
+    name: Digital Certificates
+    tactic: resource-development
+  T1588.005:
+    data_sources: []
+    name: Exploits
+    tactic: resource-development
+  T1588.006:
+    data_sources: []
+    name: Vulnerabilities
+    tactic: resource-development
+  T1588.007:
+    data_sources: []
+    name: Artificial Intelligence
+    tactic: resource-development
+  T1589:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    name: Gather Victim Identity Information
+    tactic: reconnaissance
+  T1589.001:
+    data_sources: []
+    name: Credentials
+    tactic: reconnaissance
+  T1589.002:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    name: Email Addresses
+    tactic: reconnaissance
+  T1589.003:
+    data_sources: []
+    name: Employee Names
+    tactic: reconnaissance
+  T1590:
+    data_sources: []
+    name: Gather Victim Network Information
+    tactic: reconnaissance
+  T1590.001:
+    data_sources: []
+    name: Domain Properties
+    tactic: reconnaissance
+  T1590.002:
+    data_sources: []
+    name: DNS
+    tactic: reconnaissance
+  T1590.003:
+    data_sources: []
+    name: Network Trust Dependencies
+    tactic: reconnaissance
+  T1590.004:
+    data_sources: []
+    name: Network Topology
+    tactic: reconnaissance
+  T1590.005:
+    data_sources: []
+    name: IP Addresses
+    tactic: reconnaissance
+  T1590.006:
+    data_sources: []
+    name: Network Security Appliances
+    tactic: reconnaissance
+  T1591:
+    data_sources: []
+    name: Gather Victim Org Information
+    tactic: reconnaissance
+  T1591.001:
+    data_sources: []
+    name: Determine Physical Locations
+    tactic: reconnaissance
+  T1591.002:
+    data_sources: []
+    name: Business Relationships
+    tactic: reconnaissance
+  T1591.003:
+    data_sources: []
+    name: Identify Business Tempo
+    tactic: reconnaissance
+  T1591.004:
+    data_sources: []
+    name: Identify Roles
+    tactic: reconnaissance
+  T1592:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: Gather Victim Host Information
+    tactic: reconnaissance
+  T1592.001:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: Hardware
+    tactic: reconnaissance
+  T1592.002:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: Software
+    tactic: reconnaissance
+  T1592.003:
+    data_sources: []
+    name: Firmware
+    tactic: reconnaissance
+  T1592.004:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: Client Configurations
+    tactic: reconnaissance
+  T1593:
+    data_sources: []
+    name: Search Open Websites/Domains
+    tactic: reconnaissance
+  T1593.001:
+    data_sources: []
+    name: Social Media
+    tactic: reconnaissance
+  T1593.002:
+    data_sources: []
+    name: Search Engines
+    tactic: reconnaissance
+  T1593.003:
+    data_sources: []
+    name: Code Repositories
+    tactic: reconnaissance
+  T1594:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    name: Search Victim-Owned Websites
+    tactic: reconnaissance
+  T1595:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Active Scanning
+    tactic: reconnaissance
+  T1595.001:
+    data_sources:
+    - 'Network Traffic: Network Traffic Flow'
+    name: Scanning IP Blocks
+    tactic: reconnaissance
+  T1595.002:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Vulnerability Scanning
+    tactic: reconnaissance
+  T1595.003:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    name: Wordlist Scanning
+    tactic: reconnaissance
+  T1596:
+    data_sources: []
+    name: Search Open Technical Databases
+    tactic: reconnaissance
+  T1596.001:
+    data_sources: []
+    name: DNS/Passive DNS
+    tactic: reconnaissance
+  T1596.002:
+    data_sources: []
+    name: WHOIS
+    tactic: reconnaissance
+  T1596.003:
+    data_sources: []
+    name: Digital Certificates
+    tactic: reconnaissance
+  T1596.004:
+    data_sources: []
+    name: CDNs
+    tactic: reconnaissance
+  T1596.005:
+    data_sources: []
+    name: Scan Databases
+    tactic: reconnaissance
+  T1597:
+    data_sources: []
+    name: Search Closed Sources
+    tactic: reconnaissance
+  T1597.001:
+    data_sources: []
+    name: Threat Intel Vendors
+    tactic: reconnaissance
+  T1597.002:
+    data_sources: []
+    name: Purchase Technical Data
+    tactic: reconnaissance
+  T1598:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Phishing for Information
+    tactic: reconnaissance
+  T1598.001:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Spearphishing Service
+    tactic: reconnaissance
+  T1598.002:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Spearphishing Attachment
+    tactic: reconnaissance
+  T1598.003:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Spearphishing Link
+    tactic: reconnaissance
+  T1598.004:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    name: Spearphishing Voice
+    tactic: reconnaissance
+  T1599:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Network Boundary Bridging
+    tactic: defense-evasion
+  T1599.001:
+    data_sources:
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Network Address Translation Traversal
+    tactic: defense-evasion
+  T1600:
+    data_sources:
+    - 'File: File Modification'
+    name: Weaken Encryption
+    tactic: defense-evasion
+  T1600.001:
+    data_sources:
+    - 'File: File Modification'
+    name: Reduce Key Space
+    tactic: defense-evasion
+  T1600.002:
+    data_sources:
+    - 'File: File Modification'
+    name: Disable Crypto Hardware
+    tactic: defense-evasion
+  T1601:
+    data_sources:
+    - 'File: File Modification'
+    name: Modify System Image
+    tactic: defense-evasion
+  T1601.001:
+    data_sources:
+    - 'File: File Modification'
+    name: Patch System Image
+    tactic: defense-evasion
+  T1601.002:
+    data_sources:
+    - 'File: File Modification'
+    name: Downgrade System Image
+    tactic: defense-evasion
+  T1602:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    name: Data from Configuration Repository
+    tactic: collection
+  T1602.001:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    name: SNMP (MIB Dump)
+    tactic: collection
+  T1602.002:
+    data_sources:
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    name: Network Device Configuration Dump
+    tactic: collection
+  T1606:
+    data_sources:
+    - 'Logon Session: Logon Session Creation'
+    - 'Web Credential: Web Credential Creation'
+    - 'Web Credential: Web Credential Usage'
+    name: Forge Web Credentials
+    tactic: credential-access
+  T1606.001:
+    data_sources:
+    - 'Logon Session: Logon Session Creation'
+    - 'Web Credential: Web Credential Usage'
+    name: Web Cookies
+    tactic: credential-access
+  T1606.002:
+    data_sources:
+    - 'Logon Session: Logon Session Creation'
+    - 'Logon Session: Logon Session Metadata'
+    - 'Process: Process Creation'
+    - 'User Account: User Account Authentication'
+    - 'Web Credential: Web Credential Creation'
+    - 'Web Credential: Web Credential Usage'
+    name: SAML Tokens
+    tactic: credential-access
+  T1608:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: Stage Capabilities
+    tactic: resource-development
+  T1608.001:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: Upload Malware
+    tactic: resource-development
+  T1608.002:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: Upload Tool
+    tactic: resource-development
+  T1608.003:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: Install Digital Certificate
+    tactic: resource-development
+  T1608.004:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: Drive-by Target
+    tactic: resource-development
+  T1608.005:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: Link Target
+    tactic: resource-development
+  T1608.006:
+    data_sources:
+    - 'Internet Scan: Response Content'
+    name: SEO Poisoning
+    tactic: resource-development
+  T1609:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    name: Container Administration Command
+    tactic: execution
+  T1610:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Container: Container Creation'
+    - 'Container: Container Start'
+    - 'Pod: Pod Creation'
+    - 'Pod: Pod Modification'
+    name: Deploy Container
+    tactic: defense-evasion
+  T1611:
+    data_sources:
+    - 'Container: Container Creation'
+    - 'Kernel: Kernel Module Load'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Volume: Volume Modification'
+    name: Escape to Host
+    tactic: privilege-escalation
+  T1612:
+    data_sources:
+    - 'Image: Image Creation'
+    - 'Network Traffic: Network Connection Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Network Traffic: Network Traffic Flow'
+    name: Build Image on Host
+    tactic: defense-evasion
+  T1613:
+    data_sources:
+    - 'Container: Container Enumeration'
+    - 'Pod: Pod Enumeration'
+    name: Container and Resource Discovery
+    tactic: discovery
+  T1614:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: System Location Discovery
+    tactic: discovery
+  T1614.001:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Access'
+    name: System Language Discovery
+    tactic: discovery
+  T1615:
+    data_sources:
+    - 'Active Directory: Active Directory Object Access'
+    - 'Command: Command Execution'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    name: Group Policy Discovery
+    tactic: discovery
+  T1619:
+    data_sources:
+    - 'Cloud Storage: Cloud Storage Access'
+    - 'Cloud Storage: Cloud Storage Enumeration'
+    name: Cloud Storage Object Discovery
+    tactic: discovery
+  T1620:
+    data_sources:
+    - 'Module: Module Load'
+    - 'Process: OS API Execution'
+    - 'Script: Script Execution'
+    name: Reflective Code Loading
+    tactic: defense-evasion
+  T1621:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Logon Session: Logon Session Creation'
+    - 'Logon Session: Logon Session Metadata'
+    - 'User Account: User Account Authentication'
+    name: Multi-Factor Authentication Request Generation
+    tactic: credential-access
+  T1622:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    name: Debugger Evasion
+    tactic: defense-evasion
+  T1647:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    - 'Process: Process Creation'
+    name: Plist File Modification
+    tactic: defense-evasion
+  T1648:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    - 'Cloud Service: Cloud Service Modification'
+    name: Serverless Execution
+    tactic: execution
+  T1649:
+    data_sources:
+    - 'Active Directory: Active Directory Credential Request'
+    - 'Active Directory: Active Directory Object Modification'
+    - 'Application Log: Application Log Content'
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Logon Session: Logon Session Creation'
+    - 'Windows Registry: Windows Registry Key Access'
+    name: Steal or Forge Authentication Certificates
+    tactic: credential-access
+  T1650:
+    data_sources: []
+    name: Acquire Access
+    tactic: resource-development
+  T1651:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: Process Creation'
+    - 'Script: Script Execution'
+    name: Cloud Administration Command
+    tactic: execution
+  T1652:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'Process: OS API Execution'
+    - 'Process: Process Creation'
+    - 'Windows Registry: Windows Registry Key Access'
+    name: Device Driver Discovery
+    tactic: discovery
+  T1653:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Modification'
+    name: Power Settings
+    tactic: persistence
+  T1654:
+    data_sources:
+    - 'Command: Command Execution'
+    - 'File: File Access'
+    - 'Process: Process Creation'
+    name: Log Enumeration
+    tactic: discovery
+  T1656:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    name: Impersonation
+    tactic: defense-evasion
+  T1657:
+    data_sources:
+    - 'Application Log: Application Log Content'
+    name: Financial Theft
+    tactic: impact
+  T1659:
+    data_sources:
+    - 'File: File Creation'
+    - 'Network Traffic: Network Traffic Content'
+    - 'Process: Process Creation'
+    name: Content Injection
+    tactic: initial-access
+  T1665:
+    data_sources:
+    - 'Domain Name: Domain Registration'
+    - 'Internet Scan: Response Content'
+    - 'Internet Scan: Response Metadata'
+    - 'Network Traffic: Network Traffic Content'
+    name: Hide Infrastructure
+    tactic: command-and-control

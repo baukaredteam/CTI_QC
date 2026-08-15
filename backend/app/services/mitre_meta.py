@@ -16,7 +16,12 @@ calling code stays deterministic.
 
 from __future__ import annotations
 
+import functools
+import pathlib
+from collections.abc import Callable
 from dataclasses import dataclass
+
+import yaml
 
 # ---------------------------------------------------------------------------
 # Tactic per technique — shared by the analyzer acceptance test and the scan
@@ -203,3 +208,85 @@ def gap_expected_evidence_ru(technique_id: str) -> str:
 
 # Alias used by the live-scan smoke helper.
 TTP_NAMES = TECHNIQUE_NAMES
+
+
+# ---------------------------------------------------------------------------
+# Ticket 01: MITRE ATT&CK v15 offline fixture loader + four-level fallback
+# ---------------------------------------------------------------------------
+# HC-3: this module imports no Threadlinqs client/cache modules and makes no
+# network calls. The live level (2) is *injected* by the caller as a callable;
+# with live_lookup=None the levels 1/3/4 still work.
+
+_FIXTURE_PATH = pathlib.Path(__file__).resolve().parents[2] / "fixtures" / "mitre_attack_v15.yaml"
+
+
+@functools.lru_cache(maxsize=1)
+def _load_v15_fixture() -> dict[str, dict]:
+    """Load the committed v15 fixture once; empty dict when missing/broken."""
+    try:
+        with _FIXTURE_PATH.open(encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+    techniques = data.get("techniques") or {}
+    return {k: v for k, v in techniques.items() if isinstance(v, dict)}
+
+
+def fixture_technique(technique_id: str) -> dict:
+    """Offline v15 triple {name, tactic, data_sources[]}; empty on unknown."""
+    return _load_v15_fixture().get(str(technique_id).strip().upper(), {})
+
+
+def resolve_technique_meta(
+    technique_id: str,
+    bundle_names: dict[str, str] | None = None,
+    live_lookup: Callable[[str], dict | None] | None = None,
+) -> TechniqueMeta:
+    """Four-level fallback resolution for (tactic, name); deterministic, pure.
+
+    Level 1 — bundle_names: accepted-bundle technique names (highest).
+    Level 2 — live_lookup: injected callable returning an optional
+        {name, tactic} dict (MCP live + 7-day cache); ``None`` skips it.
+    Level 3 — committed ``fixtures/mitre_attack_v15.yaml`` (offline).
+    Level 4 — hardcoded ``TTP_TACTICS``/``TECHNIQUE_NAMES`` (last resort).
+
+    Unknown techniques degrade to empty values, never a placeholder
+    (``name == id``) and never an exception.
+    """
+    tid = str(technique_id).strip().upper()
+    if not tid:
+        return TechniqueMeta(tactic="", name="")
+
+    name = ""
+    tactic = ""
+
+    # Level 1: bundle names
+    if bundle_names and tid in bundle_names:
+        name = str(bundle_names[tid]).strip()
+
+    # Level 2: injected live lookup (caller wires client + cache)
+    if live_lookup is not None and not name:
+        try:
+            live = live_lookup(tid) or {}
+        except Exception:
+            live = {}
+        if isinstance(live, dict) and live.get("name"):
+            name = str(live["name"]).strip()
+            if live.get("tactic"):
+                tactic = str(live["tactic"]).strip()
+
+    # Level 3: offline v15 fixture (fills name and/or tactic)
+    fixture = fixture_technique(tid)
+    if fixture:
+        if not name and fixture.get("name"):
+            name = str(fixture["name"]).strip()
+        if not tactic and fixture.get("tactic"):
+            tactic = str(fixture["tactic"]).strip()
+
+    # Level 4: hardcoded tables
+    if not name:
+        name = TECHNIQUE_NAMES.get(tid, "")
+    if not tactic:
+        tactic = TTP_TACTICS.get(tid, "")
+
+    return TechniqueMeta(tactic=tactic, name=name)
