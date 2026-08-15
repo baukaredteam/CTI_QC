@@ -31,8 +31,11 @@ from app.services.management_service import (
     _STATUS_RU,
 )
 from app.services.mitre_meta import (
-    candidate_fields,
+    _telemetry_fields,
     expected_evidence_ru,
+    fields_catalog,
+    low_control_field_notes,
+    low_control_fields,
     technique_meta,
 )
 from app.services.relevance_scorer import score_threat
@@ -134,18 +137,30 @@ def _expected_evidence(technique_id: str, covering: Sequence[str]) -> str:
 
 
 def _candidate_chokepoints(technique_id: str) -> list[HypothesisChokepoint]:
-    """Durable attacker-affected semantic fields as candidate chokepoints.
+    """Ticket 05: candidate chokepoints from catalog facts, not covering rules.
 
-    Drawn from the real field catalog by the shared telemetry templates
-    (``mitre_meta.candidate_fields``) — deterministic, never invented.
+    Canonical intersection — the technique's telemetry-template fields ∩ the
+    ``fields.yaml`` entries whose adversary control is exact ``LOW`` (every
+    entry for a duplicated name must declare LOW; unknown/missing entries
+    never qualify). Deterministic in template order, works for COVERAGE_GAP
+    hypotheses where no covering rules exist.
     """
-    return [
-        HypothesisChokepoint(
-            field=field,
-            note_ru=f"Кандидат-точка (устойчивое поле): {field}.",
+    catalog = fields_catalog()
+    low_fields = low_control_fields(catalog)
+    seen: set[str] = set()
+    candidates: list[HypothesisChokepoint] = []
+    for field in _telemetry_fields(technique_id):
+        if field not in low_fields or field in seen:
+            continue
+        seen.add(field)
+        note = low_control_field_notes(catalog, field)
+        candidates.append(
+            HypothesisChokepoint(
+                field=field,
+                note_ru=note or f"Кандидат-точка: поле {field} под контролем атакующего (LOW).",
+            )
         )
-        for field in candidate_fields(technique_id)
-    ]
+    return candidates
 
 
 def _iocs(normalized: Any, limit: int = TOP_IOC_LIMIT) -> list[HypothesisIOC]:

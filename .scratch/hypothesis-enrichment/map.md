@@ -121,3 +121,25 @@ cannot conflict.
 - Evidence: targeted 51/51 green (`addopts=""`); full backend regression
   **1013 passed, 11 skipped**, coverage 69.30% (gate `--cov-fail-under=60`
   passes on the full run); ruff clean on changed files.
+
+## Ticket 05 — resolved (see `issues/05-chokepoints-low.md`)
+
+- `candidate_chokepoints` in the generator = telemetry templates ∩
+  `fields.yaml` entries with exact `adversary_control == "LOW"` (canonical
+  strip+upper normalization; every duplicate entry must declare LOW —
+  contradictory duplicates are excluded). Works for COVERAGE_GAP rows with
+  zero covering rules (pinned via technique T1613 → fallback template
+  `dns_rname`).
+- New pure parse seam `mitre_meta.parse_fields_catalog` (duplicates merge:
+  availabilities union, `requires_gpo` OR, controls union per name, first
+  non-empty note wins); `fields_catalog()` keeps its signature/degradation.
+- Semantics note: the old candidates came from the hardcoded
+  `_CANDIDATE_FIELDS` list (HIGH fields included); `mitre_meta.candidate_fields`
+  and the M6.3 management summary keep their existing behavior — only the
+  hypothesis-generator path swapped, per ticket 05 boundary. Rule-derived
+  `chokepoints` (`_chokepoints_for`) untouched; no new Hypothesis schema
+  fields; catalog notes ride the existing `note_ru`.
+- Evidence: targeted 76/76 green (`addopts=""`, incl. `test_m6_meta.py`);
+  full backend regression **1030 passed, 11 skipped**, coverage 69.33%
+  (gate `--cov-fail-under=60` passes on the full run); ruff clean on
+  changed files.

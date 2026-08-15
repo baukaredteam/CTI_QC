@@ -452,3 +452,198 @@ def test_ticket04_bonus_stays_display_only_through_lifecycle():
     assert validated.status == "validated"
     assert validated.confidence_priority_bonus == row.confidence_priority_bonus
     assert validated.priority == row.priority
+
+
+# ---------------------------------------------------------------------------
+# Ticket 05 — candidate_chokepoints = technique telemetry templates
+# ∩ fields.yaml entries with adversary_control == "LOW" (canonical comparison)
+# ---------------------------------------------------------------------------
+
+
+def _raw_entry(name: str, control: str) -> dict:
+    """One raw fields.yaml custom_field row (untrusted QRadar shape);
+    canonicalization happens inside parse_fields_catalog."""
+    return {
+        "name": name,
+        "adversary_control": control,
+        "availability": "full",
+        "requires_gpo": False,
+        "notes": "synthetic note",
+    }
+
+
+def _synth_catalog():
+    from app.services.mitre_meta import parse_fields_catalog
+
+    raw = [
+        _raw_entry("low_field", "LOW"),
+        _raw_entry("high_field", "HIGH"),
+        _raw_entry("med_field", "MED"),
+        _raw_entry("proc_cmdline", "HIGH"),
+        _raw_entry("dup_field", "LOW"),
+        _raw_entry("dup_field", "LOW"),
+        _raw_entry("dup_conflict", "LOW"),
+        _raw_entry("dup_conflict", "HIGH"),
+        _raw_entry("nocontrol", ""),
+    ]
+    return parse_fields_catalog({"custom_fields": raw})
+
+
+_SYNTH_TEMPLATE = (
+    "low_field",
+    "high_field",
+    "med_field",
+    "proc_cmdline",
+    "dup_field",
+    "dup_conflict",
+    "nocontrol",
+    "missing_field",
+)
+
+
+def _patched_catalog(monkeypatch):
+    # Patch the names as bound in hypothesis_generator (from-import rebinding).
+    monkeypatch.setattr(
+        "app.services.hypothesis_generator.fields_catalog", lambda: _synth_catalog()
+    )
+    monkeypatch.setattr(
+        "app.services.hypothesis_generator._telemetry_fields", lambda tid: _SYNTH_TEMPLATE
+    )
+
+
+def test_ticket05_low_field_in_template_and_catalog_is_candidate(monkeypatch):
+    from app.services.hypothesis_generator import _candidate_chokepoints
+
+    _patched_catalog(monkeypatch)
+    fields = [c.field for c in _candidate_chokepoints("T9999")]
+    assert "low_field" in fields
+    assert "missing_field" not in fields
+
+
+def test_ticket05_high_med_and_conflict_fields_never_candidate(monkeypatch):
+    from app.services.hypothesis_generator import _candidate_chokepoints
+
+    _patched_catalog(monkeypatch)
+    fields = [c.field for c in _candidate_chokepoints("T9999")]
+    assert "high_field" not in fields
+    assert "med_field" not in fields
+    assert "proc_cmdline" not in fields
+    # Contradictory duplicate controls exclude the field entirely (an ambiguous
+    # control is never exact LOW).
+    assert "dup_conflict" not in fields
+
+
+def test_ticket05_gap_without_covering_rules_gets_candidates():
+    # T1613 exists in no rule and no fixture → COVERAGE_GAP, covering_rule_ids
+    # == []; the real template fallback ("proc_cmdline", "dns_rname") ∩ LOW
+    # catalog = {"dns_rname"} → candidates exist without covering rules.
+    bundle = {**_THREAT_BUNDLE, "ttps": ["T1613"]}
+    rows = _gen_bundle(bundle, max_hypotheses=50)
+    gap = next(
+        r for r in rows if r.coverage_status == "COVERAGE_GAP" and r.technique_id == "T1613"
+    )
+    assert gap.covering_rule_ids == []
+    assert gap.chokepoints == []
+    from app.services.mitre_meta import _telemetry_fields, fields_catalog
+
+    catalog = fields_catalog()
+    real_low = {
+        f
+        for f in _telemetry_fields("T1613")
+        if (catalog.get(f) or {}).get("adversary_controls") == {"LOW"}
+    }
+    assert real_low, "fixture precondition: the fallback template must hold a LOW catalog field"
+    assert {c.field for c in gap.candidate_chokepoints} == real_low
+
+
+def test_ticket05_rule_chokepoints_remain_rule_derived():
+    from app.services.hypothesis_generator import _chokepoints_for
+
+    baseline = _gen("finance", max_hypotheses=20)
+    assert _chokepoints_for("T1059.001", []) == []
+    # The rule-derived list is byte-identical to what the generator emitted:
+    # rules, never the catalog, are its source.
+    rules = _rules()
+    for row in baseline:
+        assert [
+            (c.field, c.note_ru) for c in _chokepoints_for(row.technique_id, rules)
+        ] == [(c.field, c.note_ru) for c in row.chokepoints]
+
+
+def test_ticket05_duplicate_entries_yield_single_deterministic_candidate(monkeypatch):
+    from app.services.hypothesis_generator import _candidate_chokepoints
+
+    _patched_catalog(monkeypatch)
+    first = [c.field for c in _candidate_chokepoints("T9999")]
+    second = [c.field for c in _candidate_chokepoints("T9999")]
+    assert first == second
+    assert first.count("dup_field") == 1
+
+
+def test_ticket05_unknown_and_uncontrolled_entries_never_become_low(monkeypatch):
+    from app.services.hypothesis_generator import _candidate_chokepoints
+
+    _patched_catalog(monkeypatch)
+    fields = [c.field for c in _candidate_chokepoints("T9999")]
+    assert fields, "synthetic fixture must produce a non-empty intersection"
+    assert "missing_field" not in fields
+    assert "nocontrol" not in fields
+
+
+@pytest.mark.parametrize(
+    ("control", "expected"),
+    [
+        ("LOW", True),
+        ("low", True),
+        (" LOW", True),
+        ("Low", True),
+        ("HIGH", False),
+        ("MED", False),
+        ("", False),
+        ("LOW!", False),
+        ("MEDIUM", False),
+    ],
+)
+def test_ticket05_exact_low_after_project_normalization_only(monkeypatch, control, expected):
+    # Raw YAML values flow through the canonical parse step (strip + upper),
+    # the project's existing normalization — the exact LOW comparison runs on
+    # the canonicalized value, never on raw synonyms.
+    from app.services.mitre_meta import parse_fields_catalog
+    from app.services.hypothesis_generator import _candidate_chokepoints
+
+    catalog = parse_fields_catalog({"custom_fields": [_raw_entry("probe", control)]})
+    monkeypatch.setattr(
+        "app.services.hypothesis_generator.fields_catalog", lambda: catalog
+    )
+    monkeypatch.setattr(
+        "app.services.hypothesis_generator._telemetry_fields", lambda tid: ("probe",)
+    )
+    fields = [c.field for c in _candidate_chokepoints("T9999")]
+    assert ("probe" in fields) is expected
+
+
+def test_ticket05_bonus_priority_and_ordering_untouched_by_candidates(monkeypatch):
+    baseline = _gen("finance", max_hypotheses=10)
+    _patched_catalog(monkeypatch)
+    patched = _gen("finance", max_hypotheses=10)
+    assert [r.id for r in baseline] == [r.id for r in patched]
+    assert [r.priority for r in baseline] == [r.priority for r in patched]
+    assert [r.confidence_priority_bonus for r in baseline] == [
+        r.confidence_priority_bonus for r in patched
+    ]
+    assert [[(c.field, c.note_ru) for c in r.chokepoints] for r in baseline] == [
+        [(c.field, c.note_ru) for c in r.chokepoints] for r in patched
+    ]
+
+
+def test_ticket05_repeated_generation_deterministic_with_candidates():
+    bundle = {**_THREAT_BUNDLE, "ttps": ["T1613"]}
+    first = [
+        r.model_dump() for r in _gen_bundle(bundle, max_hypotheses=10, now="2026-01-01T00:00:00+00:00")
+    ]
+    second = [
+        r.model_dump() for r in _gen_bundle(bundle, max_hypotheses=10, now="2026-01-01T00:00:00+00:00")
+    ]
+    assert first == second
+    gap = next(d for d in first if d["technique_id"] == "T1613")
+    assert gap["candidate_chokepoints"]

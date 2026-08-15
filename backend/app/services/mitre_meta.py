@@ -233,6 +233,17 @@ def fields_catalog() -> dict[str, dict[str, Any]]:
             data = yaml.safe_load(fh) or {}
     except (OSError, yaml.YAMLError):
         return {}
+    return parse_fields_catalog(data if isinstance(data, dict) else {})
+
+
+def parse_fields_catalog(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Pure, deterministic parse of ``custom_fields`` into per-name facts.
+
+    Duplicate names merge: availabilities union, ``requires_gpo`` OR-combined,
+    adversary controls union, first non-empty note wins. Raw values are treated
+    as untrusted QRadar data — stored inert, canonicalized here once with the
+    project's existing strip+upper normalization.
+    """
     entries: dict[str, dict[str, Any]] = {}
     for cf in data.get("custom_fields") or []:
         if not isinstance(cf, dict):
@@ -242,6 +253,8 @@ def fields_catalog() -> dict[str, dict[str, Any]]:
             continue
         availability = str(cf.get("availability") or "").strip().lower()
         requires_gpo = bool(cf.get("requires_gpo", False))
+        control = str(cf.get("adversary_control") or "").strip().upper()
+        notes = str(cf.get("notes") or "").strip()
         existing = entries.get(name)
         if existing is None:
             availabilities: set[str] = {availability} if availability else set()
@@ -249,6 +262,8 @@ def fields_catalog() -> dict[str, dict[str, Any]]:
                 "availability": availability,
                 "availabilities": availabilities,
                 "requires_gpo": requires_gpo,
+                "adversary_controls": {control} if control else set(),
+                "notes": notes,
             }
         else:
             if availability:
@@ -256,7 +271,29 @@ def fields_catalog() -> dict[str, dict[str, Any]]:
                 if availability != "full" or not existing["availability"]:
                     existing["availability"] = availability
             existing["requires_gpo"] = existing["requires_gpo"] or requires_gpo
+            if control:
+                existing["adversary_controls"].add(control)
+            if notes and not existing["notes"]:
+                existing["notes"] = notes
     return entries
+
+
+# Canonical exact LOW test: a field qualifies only when every catalog entry
+# for it declares LOW — an ambiguous/contradictory control is never LOW.
+_FIELD_CONTROL_LOW: frozenset[str] = frozenset({"LOW"})
+
+
+def low_control_fields(catalog: dict[str, dict[str, Any]]) -> set[str]:
+    return {
+        name
+        for name, entry in catalog.items()
+        if entry.get("adversary_controls") == _FIELD_CONTROL_LOW
+    }
+
+
+def low_control_field_notes(catalog: dict[str, dict[str, Any]], field: str) -> str:
+    """Catalog note for a field ("" when absent) — inert untrusted data."""
+    return str((catalog.get(field) or {}).get("notes") or "")
 
 
 def expected_evidence_ru(
