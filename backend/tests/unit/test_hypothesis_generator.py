@@ -17,6 +17,7 @@ no LLM. Covers:
 from __future__ import annotations
 
 import asyncio
+import json
 import pathlib
 
 import pytest
@@ -319,3 +320,135 @@ def test_ticket03_marker_stream_separation_in_generated_rows():
             for m in other:
                 assert m not in row.text_ru
             assert f"{GAP_MARKER_RU} —" not in row.text_ru
+
+
+# ---------------------------------------------------------------------------
+# Ticket 04 — display-only confidence_priority_bonus
+# ---------------------------------------------------------------------------
+
+# Canonical high-confidence bundle: the attribution block is the real-bundle
+# shape consumed by threadlinqs_normalizer._extract_attribution (the only
+# source of NormalizedThreat.actor_confidence). The top-level actor_confidence
+# key of _THREAT_BUNDLE is not read by the normalizer.
+_HIGH_CONF_BUNDLE = {
+    **_THREAT_BUNDLE,
+    "attribution": {"threat_actor": "Sauri", "confidence": "high"},
+}
+# Non-high baseline: no attribution block -> actor_confidence == "".
+_NO_CONF_BUNDLE = {**_THREAT_BUNDLE}
+
+
+def _gen_bundle(bundle: dict, tenant_id: str = "finance", **kwargs):
+    return generate_hypotheses(
+        threat_id="TL-2026-1693",
+        bundle=dict(bundle),
+        tenant=require_tenant(tenant_id),
+        rules=_rules(),
+        **kwargs,
+    )
+
+
+def test_ticket04_high_confidence_bonus_is_priority_times_1_25():
+    rows = _gen_bundle(_HIGH_CONF_BUNDLE, max_hypotheses=10)
+    assert rows
+    for row in rows:
+        assert row.confidence_priority_bonus == pytest.approx(row.priority * 1.25)
+
+
+@pytest.mark.parametrize("confidence", ["medium", "low", "", "unknown", "community"])
+def test_ticket04_non_high_confidence_bonus_is_none(confidence):
+    bundle = {**_THREAT_BUNDLE, "attribution": {"threat_actor": "Test Actor", "confidence": confidence}}
+    rows = _gen_bundle(bundle, max_hypotheses=1)
+    assert rows
+    for row in rows:
+        assert row.confidence_priority_bonus is None
+
+
+def test_ticket04_original_priority_unchanged_for_high():
+    high_rows = _gen_bundle(_HIGH_CONF_BUNDLE, max_hypotheses=10)
+    base_rows = _gen_bundle(_NO_CONF_BUNDLE, max_hypotheses=10)
+    assert high_rows and base_rows
+    # Same coverage facts -> identical priorities and queue ids, with or
+    # without the actor-confidence bonus.
+    assert [r.priority for r in high_rows] == [r.priority for r in base_rows]
+    assert [r.id for r in high_rows] == [r.id for r in base_rows]
+    for row in high_rows:
+        assert row.confidence_priority_bonus is not None
+        assert row.confidence_priority_bonus != row.priority or row.priority == 0.0
+
+
+def test_ticket04_original_priority_unchanged_for_non_high():
+    rows = _gen_bundle(_NO_CONF_BUNDLE, max_hypotheses=10)
+    base_rows = _gen("finance", max_hypotheses=10)
+    assert [r.priority for r in rows] == [r.priority for r in base_rows]
+    for row in rows:
+        assert row.confidence_priority_bonus is None
+
+
+def test_ticket04_output_ordering_unchanged_by_bonus():
+    high_rows = _gen_bundle(_HIGH_CONF_BUNDLE, max_hypotheses=10)
+    base_rows = _gen_bundle(_NO_CONF_BUNDLE, max_hypotheses=10)
+    # Queue order (priority-desc blind spots) is identical with the bonus.
+    assert [r.id for r in high_rows] == [r.id for r in base_rows]
+    priorities = [r.priority for r in high_rows]
+    assert priorities == sorted(priorities, reverse=True)
+
+
+def test_ticket04_missing_bonus_in_serialized_json_reads_as_none(tmp_path):
+    row = _gen_bundle(_HIGH_CONF_BUNDLE, max_hypotheses=1, now="2026-01-01T00:00:00+00:00")[0]
+    dump = row.model_dump()
+    dump.pop("confidence_priority_bonus", None)
+    path = tmp_path / "legacy_hypotheses.json"
+    path.write_text(json.dumps([dump], ensure_ascii=False), encoding="utf-8")
+    clear()
+    assert load_from_file(path) == 1
+    loaded = get_hypothesis(row.id)
+    assert loaded is not None
+    assert loaded.confidence_priority_bonus is None
+
+
+def test_ticket04_repeated_generation_is_deterministic_including_bonus():
+    first = [r.model_dump() for r in _gen_bundle(_HIGH_CONF_BUNDLE, max_hypotheses=5, now="2026-01-01T00:00:00+00:00")]
+    second = [r.model_dump() for r in _gen_bundle(_HIGH_CONF_BUNDLE, max_hypotheses=5, now="2026-01-01T00:00:00+00:00")]
+    assert first == second
+    assert any(r["confidence_priority_bonus"] is not None for r in first)
+
+
+@pytest.mark.parametrize(
+    ("confidence", "expect_bonus"),
+    [
+        # Existing canonical predicate (hypothesis_generator/management_service):
+        # str(confidence).lower() in {"high", "высокая"} — nothing else counts.
+        ("high", True),
+        ("Высокая", True),
+        ("medium", False),
+        ("low", False),
+        ("", False),
+        ("unknown", False),
+        ("community", False),
+        # Trailing space: _extract_attribution strips whitespace as part of
+        # the existing canonical normalization, so this reads as "high".
+        ("HIGH ", True),
+        ("high!", False),
+    ],
+)
+def test_ticket04_bonus_follows_canonical_confidence_normalization_only(confidence, expect_bonus):
+    bundle = {**_THREAT_BUNDLE, "attribution": {"threat_actor": "Test Actor", "confidence": confidence}}
+    rows = _gen_bundle(bundle, max_hypotheses=1)
+    assert rows
+    if expect_bonus:
+        assert rows[0].confidence_priority_bonus == pytest.approx(rows[0].priority * 1.25)
+    else:
+        assert rows[0].confidence_priority_bonus is None
+
+
+def test_ticket04_bonus_stays_display_only_through_lifecycle():
+    rows = _gen_bundle(_HIGH_CONF_BUNDLE, max_hypotheses=1)
+    row = rows[0]
+    # Sorting is by priority, not by the display bonus.
+    assert [r.priority for r in rows] == sorted((r.priority for r in rows), reverse=True)
+    add_hypothesis(row)
+    validated = update_status(row.id, "validated")
+    assert validated.status == "validated"
+    assert validated.confidence_priority_bonus == row.confidence_priority_bonus
+    assert validated.priority == row.priority

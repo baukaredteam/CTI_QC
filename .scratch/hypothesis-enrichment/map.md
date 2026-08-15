@@ -102,3 +102,22 @@ cannot conflict.
 - Evidence: 15 new tests (targeted 38/38 green with `addopts=""`); full
   backend regression **992 passed, 11 skipped**, coverage 69.30%; ruff clean
   on all changed files.
+
+## Ticket 04 — resolved (see `issues/04-confidence-priority-bonus.md`)
+
+- `Hypothesis.confidence_priority_bonus: float | None = None` appended as the
+  last schema field (first of the 04→08→09 serialized appends); no migration,
+  absent JSON key reads as `None` (backward-compatible round-trip pinned).
+- `generate_hypotheses` computes `priority × 1.25` only when the normalized
+  `actor_confidence` is canonical high — existing predicate
+  `str(conf).lower() in {"high", "высокая"}` reused; no new synonyms or
+  taxonomy. `medium`/`low`/empty/`unknown`/`community` → `None`.
+- Nuance encoded in tests: `_extract_attribution`'s existing `.strip()` is
+  part of canonical normalization, so raw `"HIGH "` qualifies; no new
+  normalization introduced.
+- Display-only (P2): `priority` never mutated, ids/queue order unchanged,
+  bonus excluded from scoring, sorting, validation/rejection and persistence
+  decisions; 21 new tests (red phase confirmed at assertion level, not env).
+- Evidence: targeted 51/51 green (`addopts=""`); full backend regression
+  **1013 passed, 11 skipped**, coverage 69.30% (gate `--cov-fail-under=60`
+  passes on the full run); ruff clean on changed files.

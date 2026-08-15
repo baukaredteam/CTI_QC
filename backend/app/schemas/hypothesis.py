@@ -62,3 +62,6 @@ class Hypothesis(BaseModel):
     data_sources: list[str] = Field(default_factory=list)
     created_at: str = ""
     updated_at: str = ""
+    # Ticket 04 (R2-Q3): display-only bonus = priority × 1.25 for high actor
+    # confidence. Never mutates priority, never reorders the M6.1 queue.
+    confidence_priority_bonus: float | None = Field(default=None)

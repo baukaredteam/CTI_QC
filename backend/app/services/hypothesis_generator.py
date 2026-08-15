@@ -295,6 +295,13 @@ def generate_hypotheses(
     if min_relevance is not None and float(getattr(scored, "score", 0.0)) < float(min_relevance):
         return []
 
+    # Ticket 04 (R2-Q3): display-only bonus uses the same canonical high-
+    # confidence predicate as the Admiralty evidence path — no new taxonomy.
+    actor_confidence_high = str(getattr(normalized, "actor_confidence", "") or "").lower() in {
+        "high",
+        "высокая",
+    }
+
     hypotheses: list[Hypothesis] = []
     merged_names = {**_bundle_technique_names(normalized), **(technique_names or {})}
     for rec in report.summary.blind_spots[: max_hypotheses]:
@@ -321,6 +328,7 @@ def generate_hypotheses(
                 technique_name=technique_name,
                 tactic=tactic,
                 priority=float(rec.priority),
+                confidence_priority_bonus=float(rec.priority) * 1.25 if actor_confidence_high else None,
                 zone=str(getattr(scored, "zone", "")),
                 status="proposed",
                 coverage_status=str(rec.primary_status),
