@@ -18,8 +18,9 @@ from __future__ import annotations
 
 import functools
 import pathlib
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from typing import Any
 
 import yaml
 
@@ -208,6 +209,124 @@ def gap_expected_evidence_ru(technique_id: str) -> str:
 
 # Alias used by the live-scan smoke helper.
 TTP_NAMES = TECHNIQUE_NAMES
+
+
+# ---------------------------------------------------------------------------
+# Ticket 03: approved expected-evidence derivation
+# ---------------------------------------------------------------------------
+# Expected evidence is derived from: MITRE v15 data sources × fields.yaml
+# availability × requires_gpo × adversary playbooks (optional seam, fed by the
+# MCP enrichment of ticket 08). Never from a hardcoded candidate-field list.
+
+_FIELDS_YAML_PATH = pathlib.Path(__file__).resolve().parents[2] / "fixtures" / "fields.yaml"
+
+
+@functools.lru_cache(maxsize=1)
+def fields_catalog() -> dict[str, dict[str, Any]]:
+    """Real fields.yaml facts per field name: availability + requires_gpo.
+
+    Absence of a field means "unknown", never "false". Empty when the fixture
+    is missing or unparseable (offline degradation stays deterministic).
+    """
+    try:
+        with _FIELDS_YAML_PATH.open(encoding="utf-8") as fh:
+            data = yaml.safe_load(fh) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+    entries: dict[str, dict[str, Any]] = {}
+    for cf in data.get("custom_fields") or []:
+        if not isinstance(cf, dict):
+            continue
+        name = str(cf.get("name") or "").strip()
+        if not name:
+            continue
+        availability = str(cf.get("availability") or "").strip().lower()
+        requires_gpo = bool(cf.get("requires_gpo", False))
+        existing = entries.get(name)
+        if existing is None:
+            availabilities: set[str] = {availability} if availability else set()
+            entries[name] = {
+                "availability": availability,
+                "availabilities": availabilities,
+                "requires_gpo": requires_gpo,
+            }
+        else:
+            if availability:
+                existing["availabilities"].add(availability)
+                if availability != "full" or not existing["availability"]:
+                    existing["availability"] = availability
+            existing["requires_gpo"] = existing["requires_gpo"] or requires_gpo
+    return entries
+
+
+def expected_evidence_ru(
+    technique_id: str,
+    adversary_playbooks: Sequence[str] = (),
+) -> str:
+    """Russian expected-evidence statement for an uncovered (COVERAGE_GAP)
+    technique, derived from the approved model.
+
+    Dimensions, in order (each only surfaces when the data is actually
+    available — absence never invents facts):
+    1. MITRE v15 ``data_sources`` from the offline fixture;
+    2. the technique's telemetry fields crossed with fields.yaml entries:
+       fields whose availability is not ``full`` are flagged partial; fields
+       with ``requires_gpo`` carry the GPO configuration note;
+    3. ``adversary_playbooks`` — enrichment seam, empty until ticket 08 feeds
+       it (no playbooks provided ≠ "there are none").
+    """
+    meta = technique_meta(technique_id)
+    tactic = meta.tactic or "tactic unknown"
+    name = meta.name or technique_id
+    tid = str(technique_id).strip().upper()
+
+    parts = [f"Ожидаемые свидетельства техники {tid} ({name}, тактика «{tactic}»)"]
+
+    catalog = fields_catalog()
+    gpo_fields = sorted(
+        f for f in _telemetry_fields(tid) if f in catalog and catalog[f].get("requires_gpo")
+    )
+    partial_fields = sorted(
+        f for f in _telemetry_fields(tid)
+        if f in catalog
+        and not catalog[f].get("requires_gpo")
+        and catalog[f].get("availability") not in ("", "full")
+    )
+    known_fields = sorted(
+        f for f in _telemetry_fields(tid)
+        if f in catalog
+        and not catalog[f].get("requires_gpo")
+        and catalog[f].get("availability") == "full"
+    )
+    unknown_fields = sorted(f for f in _telemetry_fields(tid) if f not in catalog)
+
+    if known_fields:
+        parts.append(f"корреляция в телеметрии по полям {', '.join(known_fields)}")
+    if partial_fields:
+        parts.append(
+            f"поля с частичной доступностью (availability ≠ full): {', '.join(partial_fields)}"
+        )
+    if gpo_fields:
+        parts.append(
+            "поля, требующие настройки GPO (при отсутствии GPO поле может быть пустым): "
+            + ", ".join(gpo_fields)
+        )
+    if unknown_fields:
+        parts.append(f"каталог полей не подтверждает: {', '.join(unknown_fields)}")
+
+    data_sources = [str(s).strip() for s in (fixture_technique(tid).get("data_sources") or []) if str(s).strip()]
+    if data_sources:
+        parts.append(f"ATT&CK data sources: {', '.join(data_sources)}")
+    else:
+        parts.append("ATT&CK data sources для техники в каталоге отсутствуют")
+
+    playbooks = [str(p).strip() for p in (adversary_playbooks or []) if str(p).strip()]
+    if playbooks:
+        parts.append(f"adversary playbooks: {', '.join(playbooks)}")
+    else:
+        parts.append("adversary playbooks не переданы — обогащение недоступно")
+
+    return "; ".join(parts) + ". Требуется авторство нового покрывающего правила."
 
 
 # ---------------------------------------------------------------------------

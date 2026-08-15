@@ -87,3 +87,18 @@ cannot conflict.
 - Evidence: 9/9 ticket tests green; full backend regression **977 passed,
   11 skipped**, coverage 69.25% (gate `--cov-fail-under=60` passes on the
   full run; lone-file runs cannot reach it — same note as ticket 01).
+
+## Ticket 03 — resolved (see `issues/03-blind-spot-markers.md`)
+
+- Marker constants live in `management_service.py` (R2-Q4 exact text);
+  `BLIND_MARKER_RU["COVERAGE_GAP"]` reuses `GAP_MARKER_RU` — no duplicate.
+- `_apply_blind_marker_ru(status, text)` in `hypothesis_generator.py`,
+  applied only at `expected_evidence_ru` assembly: idempotent, exact-key
+  statuses only (`COVERED`/unknown/`None` pass through unmarked); `text_ru`
+  untouched — P1 stream separation pinned by tests.
+- Expected evidence now derived from v15 `data_sources` × `fields.yaml`
+  availability × `requires_gpo` × `adversary_playbooks` seam (ticket 08);
+  the M6.4 generator path no longer uses `_CANDIDATE_FIELDS`.
+- Evidence: 15 new tests (targeted 38/38 green with `addopts=""`); full
+  backend regression **992 passed, 11 skipped**, coverage 69.30%; ruff clean
+  on all changed files.

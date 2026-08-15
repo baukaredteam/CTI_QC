@@ -234,3 +234,88 @@ def test_generator_determinism_includes_enrichment():
     first = [row.model_dump() for row in _gen("finance", now="2026-01-01T00:00:00+00:00")]
     second = [row.model_dump() for row in _gen("finance", now="2026-01-01T00:00:00+00:00")]
     assert first == second
+
+
+# ---------------------------------------------------------------------------
+# Ticket 03 — blind-spot markers in expected_evidence_ru
+# ---------------------------------------------------------------------------
+
+_TEXT = "Ожидаемые свидетельства техники T9999."
+
+# Exact marker constants (R2-Q4; CONTEXT.md glossary vocabulary).
+_MARKER_TEXTS = {
+    "COVERAGE_GAP": "нет покрывающего правила",
+    "DRL_BLIND": "источник не видит событие",
+    "FIELD_PARTIAL": "частичное покрытие",
+    "SYSMON_BLIND": "Sysmon не охвачен",
+}
+
+
+@pytest.mark.parametrize("status", sorted(_MARKER_TEXTS))
+def test_ticket03_marker_constants_exist_with_exact_text(status):
+    """The four marker constants exist in the canonical module with the exact
+    R2-Q4 text, and the gap marker is the existing GAP_MARKER_RU (no duplicate)."""
+    from app.services import management_service as ms
+
+    const = ms.BLIND_MARKER_RU[status]
+    assert const == _MARKER_TEXTS[status]
+    assert ms.BLIND_MARKER_RU["COVERAGE_GAP"] is ms.GAP_MARKER_RU
+
+
+@pytest.mark.parametrize("status", sorted(_MARKER_TEXTS))
+def test_ticket03_apply_blind_marker_ru_exact_prefix(status):
+    """Each non-COVERED status gains its exact prefix, formatted
+    "{маркер} — {текст}", applied when assembling expected_evidence_ru."""
+    from app.services.hypothesis_generator import _apply_blind_marker_ru
+
+    out = _apply_blind_marker_ru(status, _TEXT)
+    assert out == f"{_MARKER_TEXTS[status]} — {_TEXT}"
+
+
+def test_ticket03_covered_carries_no_marker():
+    from app.services.hypothesis_generator import _apply_blind_marker_ru
+
+    out = _apply_blind_marker_ru("COVERED", _TEXT)
+    assert out == _TEXT
+
+
+def test_ticket03_unknown_status_passes_through_unmarked():
+    """Unknown/malformed status is never guessed: no marker added, no
+    exception (CONTEXT.md policy — statuses come from the analyzer only)."""
+    from app.services.hypothesis_generator import _apply_blind_marker_ru
+
+    for status in ("", "totally-bogus", "FIELD_PARTIAL ", "FIELD_PARTIALX"):
+        assert _apply_blind_marker_ru(status, _TEXT) == _TEXT
+    assert _apply_blind_marker_ru(None, _TEXT) == _TEXT
+
+
+@pytest.mark.parametrize("status", sorted(_MARKER_TEXTS))
+def test_ticket03_marker_application_is_idempotent(status):
+    from app.services.hypothesis_generator import _apply_blind_marker_ru
+
+    once = _apply_blind_marker_ru(status, _TEXT)
+    twice = _apply_blind_marker_ru(status, once)
+    assert twice == once
+
+
+def test_ticket03_marker_stream_separation_in_generated_rows():
+    """P1 split: GAP_MARKER_RU stays in text_ru AND also appears in
+    expected_evidence_ru; the other three markers appear ONLY in
+    expected_evidence_ru (never in the narrative text stream)."""
+    from app.services.management_service import GAP_MARKER_RU
+
+    rows = _gen("finance", max_hypotheses=20)
+    assert rows
+    other = {_MARKER_TEXTS[s] for s in ("DRL_BLIND", "FIELD_PARTIAL", "SYSMON_BLIND")}
+    for row in rows:
+        marker = _MARKER_TEXTS.get(row.coverage_status)
+        if marker:
+            assert row.expected_evidence_ru.startswith(f"{marker} — ")
+        if row.coverage_status == "COVERAGE_GAP":
+            # P1: the existing gap marker is preserved in text_ru unchanged.
+            assert GAP_MARKER_RU in row.text_ru
+        if marker != GAP_MARKER_RU:
+            # Non-gap markers never leak into the narrative stream.
+            for m in other:
+                assert m not in row.text_ru
+            assert f"{GAP_MARKER_RU} —" not in row.text_ru

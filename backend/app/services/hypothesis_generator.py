@@ -25,10 +25,14 @@ from app.services.admiralty import (
     assign as assign_admiralty,
 )
 from app.services.coverage.analyzer import COVERAGE_GAP, analyze_coverage
-from app.services.management_service import GAP_MARKER_RU, _STATUS_RU
+from app.services.management_service import (
+    BLIND_MARKER_RU,
+    GAP_MARKER_RU,
+    _STATUS_RU,
+)
 from app.services.mitre_meta import (
     candidate_fields,
-    gap_expected_evidence_ru,
+    expected_evidence_ru,
     technique_meta,
 )
 from app.services.relevance_scorer import score_threat
@@ -52,6 +56,27 @@ def _hypothesis_id(threat_id: str, tenant_id: str, technique_id: str) -> str:
 
 def _status_ru(status: str) -> str:
     return _STATUS_RU.get(status, status)
+
+
+def _apply_blind_marker_ru(status: str | None, text: str) -> str:
+    """Ticket 03 (R2-Q4): prefix ``expected_evidence_ru`` with the blind-spot
+    marker term for the coverage status, formatted ``"{маркер} — {текст}"``.
+
+    Only exact glossary statuses from the coverage analyzer get a marker
+    (same exact-key contract as ``_STATUS_RU``): ``COVERED``, unknown and
+    malformed statuses pass through unmarked (the status set is never
+    guessed). Idempotent — a text already carrying its marker is returned
+    unchanged.
+    """
+    if status is None:
+        return text
+    marker = BLIND_MARKER_RU.get(str(status))
+    if marker is None:
+        return text
+    prefix = f"{marker} — "
+    if text.startswith(prefix):
+        return text
+    return prefix + text
 
 
 def _chokepoints_for(
@@ -103,14 +128,9 @@ def _expected_evidence(technique_id: str, covering: Sequence[str]) -> str:
             f"Ожидаемые поля/признаки техники {technique_id}; соотносить с правилами: "
             f"{', '.join(covering)}."
         )
-    # COVERAGE_GAP: deterministic technique template (names technique + sources).
-    template = gap_expected_evidence_ru(technique_id)
-    if template:
-        return template
-    return (
-        "Нет покрывающего правила — ожидаемые свидетельства определит аналитик "
-        "после валидации."
-    )
+    # COVERAGE_GAP: approved derived model — v15 data sources, fields.yaml
+    # availability/requires_gpo, adversary playbooks (seam; ticket 08 feeds it).
+    return expected_evidence_ru(technique_id)
 
 
 def _candidate_chokepoints(technique_id: str) -> list[HypothesisChokepoint]:
@@ -313,7 +333,9 @@ def generate_hypotheses(
                 ),
                 chokepoints=_chokepoints_for(technique_id, rules_list),
                 candidate_chokepoints=_candidate_chokepoints(technique_id),
-                expected_evidence_ru=_expected_evidence(technique_id, covering),
+                expected_evidence_ru=_apply_blind_marker_ru(
+                    str(rec.primary_status), _expected_evidence(technique_id, covering)
+                ),
                 text_ru=text,
                 threat_title=str(getattr(normalized, "title", "") or threat_id),
                 threat_summary=_threat_summary(normalized, threat_id),

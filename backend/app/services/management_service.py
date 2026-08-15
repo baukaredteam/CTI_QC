@@ -115,6 +115,19 @@ _STATUS_RU: dict[str, str] = {
     "COVERAGE_GAP": GAP_MARKER_RU,
 }
 
+# Ticket 03 (R2-Q4): blind-spot marker terms prefixed onto expected_evidence_ru.
+# Exact glossary text — never a synonym; the gap marker reuses GAP_MARKER_RU.
+DRL_BLIND_MARKER_RU = "источник не видит событие"
+FIELD_PARTIAL_MARKER_RU = "частичное покрытие"
+SYSMON_BLIND_MARKER_RU = "Sysmon не охвачен"
+
+BLIND_MARKER_RU: dict[str, str] = {
+    "COVERAGE_GAP": GAP_MARKER_RU,
+    "DRL_BLIND": DRL_BLIND_MARKER_RU,
+    "FIELD_PARTIAL": FIELD_PARTIAL_MARKER_RU,
+    "SYSMON_BLIND": SYSMON_BLIND_MARKER_RU,
+}
+
 
 def _fixtures_dir() -> Path:
     """Resolve the backend fixtures directory relative to this module."""
