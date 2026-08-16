@@ -17,6 +17,7 @@ from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.shared.exceptions import McpError
 
 from app.services.circuit_breaker import CircuitBreaker, CircuitOpenError
 from app.services.rate_limiter import DailyRateLimiter, RateLimitExceeded
@@ -46,6 +47,7 @@ def _parse_tool_result(result: Any) -> Any:
         except (json.JSONDecodeError, TypeError):
             return result
     return result
+
 
 # Rate limiter: 5000 calls/day (Purple tier)
 _rate_limiter = DailyRateLimiter(daily_limit=5000)
@@ -85,9 +87,7 @@ class ThreadlinqsClient:
     async def _create_session(self) -> None:
         """Spawn npx process and perform MCP initialize handshake."""
         if not self._api_key:
-            raise ThreadlinqsSessionError(
-                "THREADLINQS_API_KEY is not set"
-            )
+            raise ThreadlinqsSessionError("THREADLINQS_API_KEY is not set")
 
         server_params = StdioServerParameters(
             command="npx",
@@ -115,9 +115,7 @@ class ThreadlinqsClient:
 
         except Exception as exc:
             await self._cleanup()
-            raise ThreadlinqsSessionError(
-                f"Failed to create Threadlinqs session: {exc}"
-            ) from exc
+            raise ThreadlinqsSessionError(f"Failed to create Threadlinqs session: {exc}") from exc
 
     async def _cleanup(self) -> None:
         """Clean up session and transport resources."""
@@ -158,9 +156,7 @@ class ThreadlinqsClient:
             logger.info("Threadlinqs MCP session disconnected")
 
     @_breaker
-    async def call_tool(
-        self, tool_name: str, arguments: dict[str, Any] | None = None
-    ) -> Any:
+    async def call_tool(self, tool_name: str, arguments: dict[str, Any] | None = None) -> Any:
         """Call a tool on the Threadlinqs MCP server.
 
         Applies rate limiting and circuit breaking. Reconnects on session
@@ -185,22 +181,16 @@ class ThreadlinqsClient:
 
         try:
             assert self._session is not None
-            result = await self._session.call_tool(
-                tool_name, arguments=arguments or {}
-            )
+            result = await self._session.call_tool(tool_name, arguments=arguments or {})
             return result
         except (ConnectionError, BrokenPipeError, EOFError, OSError) as exc:
             # Session lost — attempt reconnect for next call
-            logger.warning(
-                "Threadlinqs session lost during call_tool(%s): %s", tool_name, exc
-            )
+            logger.warning("Threadlinqs session lost during call_tool(%s): %s", tool_name, exc)
             try:
                 await self.reconnect()
             except Exception:
                 pass
-            raise ThreadlinqsSessionError(
-                f"Session lost during {tool_name}: {exc}"
-            ) from exc
+            raise ThreadlinqsSessionError(f"Session lost during {tool_name}: {exc}") from exc
 
     async def list_tools(self) -> list[Any]:
         """List available tools on the Threadlinqs server."""
@@ -230,9 +220,7 @@ class ThreadlinqsClient:
         Returns None on any failure so a missing/unknown technique degrades
         gracefully.
         """
-        result = await self.call_tool(
-            "get_mitre_technique", {"technique_id": technique_id}
-        )
+        result = await self.call_tool("get_mitre_technique", {"technique_id": technique_id})
         payload = _parse_tool_result(result)
         if isinstance(payload, dict):
             out: dict[str, Any] = {}
@@ -246,6 +234,100 @@ class ThreadlinqsClient:
             return out if out else None
         return None
 
+    # ---------------------------------------------------------------------------
+    # Ticket 06 — additively added public methods (verified protocol v7.1.0)
+    #
+    # Verified against the authoritative intelthreadlinqs-mcp@7.1.0 tool
+    # registry (dist/index.js installed globally via npm):
+    #   get_threat_hunting_bundle      inputSchema {threat_id} only
+    #   predict_mitre_transitions      {technique_id, direction, top_n, basis}
+    #   get_attack_flow                {threat_id} only
+    #   export_stix                    ABSENT in 7.1.0 — the server itself
+    #                                  says "STIX export could be a roadmap
+    #                                  ask", so no contract was invented
+    #                                  (NEEDS_DECISION, see issue 06).
+    # ---------------------------------------------------------------------------
+
+    @staticmethod
+    def _threadlinqs_enabled() -> bool:
+        """Canonical enabled flag (settings.threadlinqs_enabled, default False)."""
+        try:
+            from app.core.config import settings
+
+            return bool(settings.threadlinqs_enabled)
+        except Exception:
+            return False
+
+    async def _execute(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
+        """Run one typed MCP call with graceful degradation (never raise).
+
+        Falls back to ``{}`` on disabled config, open breaker, rate limit,
+        timeout, session loss, or malformed/non-dict payload. The API key is
+        never re-emitted in a return value or a raise.
+        """
+        if not self._threadlinqs_enabled():
+            return {}
+        try:
+            raw = await self.call_tool(tool_name, arguments)
+        except (
+            ThreadlinqsClientError,
+            CircuitOpenError,
+            RateLimitExceeded,
+            asyncio.TimeoutError,
+            McpError,
+        ):
+            return {}
+        payload = _parse_tool_result(raw)
+        return payload if isinstance(payload, dict) else {}
+
+    async def get_threat_hunting_bundle(
+        self,
+        threat_id: str,
+        simulation_limit: int = 3,
+        pivot_limit: int = 25,
+    ) -> dict[str, Any]:
+        """Purple-tier composite threat dossier (Tier 3, verified protocol).
+
+        The MCP v7.1.0 schema accepts only ``threat_id``; ``simulation_limit``
+        and ``pivot_limit`` are public-signature placeholders for future server
+        support and are NOT sent (verified against installed registry). Returns
+        the raw envelope dict, or ``{}`` on disabled/open-breaker/timeout/
+        session-loss/malformed-payload.
+        """
+        return await self._execute("get_threat_hunting_bundle", {"threat_id": threat_id})
+
+    async def predict_mitre_transitions(
+        self,
+        technique_id: str,
+        direction: str = "forward",
+        top_n: int = 5,
+        basis: str = "any",
+    ) -> dict[str, Any]:
+        """Predict MITRE ATT&CK transitions around a technique (Tier 3).
+
+        Verified schema: technique_id required; direction (forward|backward);
+        top_n (<=10); basis (any|attack_flow|simulations). All four parameters
+        are forwarded as-is for determinism. Returns the raw envelope dict
+        ({predicted_next_techniques, predicted_prev_techniques}), or ``{}``.
+        """
+        return await self._execute(
+            "predict_mitre_transitions",
+            {
+                "technique_id": technique_id,
+                "direction": direction,
+                "top_n": top_n,
+                "basis": basis,
+            },
+        )
+
+    async def get_attack_flow(self, threat_id: str) -> dict[str, Any]:
+        """Attack-flow graph for a threat (Tier 3, verified protocol).
+
+        Verified schema: threat_id required. Returns the raw envelope dict
+        ({attack_flow, nodes, edges} as the server returns them), or ``{}``.
+        """
+        return await self._execute("get_attack_flow", {"threat_id": threat_id})
+
     @property
     def rate_limiter(self) -> DailyRateLimiter:
         """Expose rate limiter for monitoring."""
@@ -256,6 +338,7 @@ class ThreadlinqsClient:
         """Try to read the key from pydantic Settings (canonical source)."""
         try:
             from app.core.config import settings
+
             return settings.threadlinqs_api_key
         except Exception:
             return ""
