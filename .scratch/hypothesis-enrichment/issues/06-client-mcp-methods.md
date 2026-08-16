@@ -4,6 +4,17 @@
 **Status:** partially-implemented
 **Blocked by:** None — can start immediately
 
+> **Boundary note (2026-08-16):** the status stays `partially-implemented`.
+> The three verified methods — `get_threat_hunting_bundle`,
+> `predict_mitre_transitions`, `get_attack_flow` — are **accepted
+> independently** (each verified against the v7.1.0 tool registry with a
+> proven name, inputSchema, and result envelope; 26 tests green). The fourth
+> checklist item, `export_stix`, is **explicitly NOT part of this acceptance**
+> and is deferred to the separate tracker issue
+> `issues/06B-export-stix.md` (status NEEDS_DECISION) until the tool exists
+> or the owner provides a schema contract. Production code, tests, schemas
+> and MCP configuration are untouched by this boundary step.
+
 **What to build:** Four new read-only methods on the Threadlinqs client so the
 pipeline can fetch hunt enrichment without touching the existing tool call
 path. Every method is wrapped by the existing `_breaker` and result parser, and
