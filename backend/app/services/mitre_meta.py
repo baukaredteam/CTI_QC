@@ -236,6 +236,34 @@ def fields_catalog() -> dict[str, dict[str, Any]]:
     return parse_fields_catalog(data if isinstance(data, dict) else {})
 
 
+# Explicit token policy for untrusted raw boolean values — unknown input is
+# never truthy (mirrors the module's silent-degradation style).
+_BOOL_TOKENS_TRUE: frozenset[str] = frozenset({"true", "yes", "1", "on"})
+_BOOL_TOKENS_FALSE: frozenset[str] = frozenset({"false", "no", "0", "off"})
+
+
+def _coerce_bool(value: Any, default: bool = False) -> bool:
+    """Pure, deterministic coercion of a raw untrusted value to bool.
+
+    A native bool is preserved; a string is matched (strip, case-insensitive)
+    against the explicit token set — ``{true, yes, 1, on}`` → True,
+    ``{false, no, 0, off}`` or empty/whitespace → False; ``None`` or any
+    unknown raw value/type falls back to ``default`` and is never truthy.
+    """
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    if isinstance(value, str):
+        token = value.strip().lower()
+        if token in _BOOL_TOKENS_TRUE:
+            return True
+        if token == "" or token in _BOOL_TOKENS_FALSE:
+            return False
+        return default
+    return default
+
+
 def parse_fields_catalog(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Pure, deterministic parse of ``custom_fields`` into per-name facts.
 
@@ -252,7 +280,7 @@ def parse_fields_catalog(data: dict[str, Any]) -> dict[str, dict[str, Any]]:
         if not name:
             continue
         availability = str(cf.get("availability") or "").strip().lower()
-        requires_gpo = bool(cf.get("requires_gpo", False))
+        requires_gpo = _coerce_bool(cf.get("requires_gpo", False))
         control = str(cf.get("adversary_control") or "").strip().upper()
         notes = str(cf.get("notes") or "").strip()
         existing = entries.get(name)

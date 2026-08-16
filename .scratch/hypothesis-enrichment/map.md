@@ -143,3 +143,26 @@ cannot conflict.
   full backend regression **1030 passed, 11 skipped**, coverage 69.33%
   (gate `--cov-fail-under=60` passes on the full run); ruff clean on
   changed files.
+
+## Post-Ticket 05 — hardening hotfix: canonical `requires_gpo` coercion
+
+- **Bug**: `parse_fields_catalog` used `bool(cf.get("requires_gpo", False))`;
+  for raw string input `bool("false") is True`, so untrusted QRadar YAML
+  values flipped `requires_gpo` (and, merged by OR, its duplicates) to the
+  wrong truthiness; unknown strings were always truthy.
+- **Fix**: one pure, deterministic helper `mitre_meta._coerce_bool` in the
+  canonical parser layer with an explicit token policy — native bool
+  preserved; string (strip, case-insensitive) `{true, yes, 1, on}` → True,
+  `{false, no, 0, off}` or empty/whitespace → False; `None` or any unknown
+  raw value/type → default False, never truthy (mirrors the module's
+  silent-degradation style). Only the direct `bool(...)` coercion in
+  `parse_fields_catalog` was replaced; the duplicate OR-merge and the
+  `fields_catalog` public shape are unchanged.
+- Scope guard: `fields_harvest` (ticket 02, Pydantic-typed path),
+  `_chokepoints_for`, `candidate_chokepoints` semantics, priority,
+  Admiralty, coverage, markers, confidence bonus, schemas, API and MCP are
+  all untouched — the ticket 03-05 invariant tests stay green.
+- Evidence: 12 red → green (token policy + duplicate OR-merge + LOW
+  invariance + determinism); targeted 119/119 (`addopts=""`); full backend
+  regression **1064 passed, 11 skipped**, coverage 69.34% (gate
+  `--cov-fail-under=60` passes); ruff clean on changed files.
