@@ -166,3 +166,68 @@ cannot conflict.
   invariance + determinism); targeted 119/119 (`addopts=""`); full backend
   regression **1064 passed, 11 skipped**, coverage 69.34% (gate
   `--cov-fail-under=60` passes); ruff clean on changed files.
+
+## Ticket 06 — partially-implemented (see `issues/06-client-mcp-methods.md`)
+
+- Three methods accepted independently, each verified against the v7.1.0 tool
+  registry (`intelthreadlinqs-mcp@7.1.0`, `dist/index.js`): `get_threat_hunting_bundle`
+  (schema `{threat_id}` only — `simulation_limit`/`pivot_limit` stay
+  signature-level placeholders, NOT sent), `predict_mitre_transitions`
+  (`{technique_id, direction, top_n, basis}`, 1:1 with the public signature),
+  `get_attack_flow` (`{threat_id}`, 1:1). Each goes through the existing
+  `_execute` degradation set (disabled flag / breaker / rate limit / timeout /
+  session loss / malformed payload → `{}`, never an exception).
+- Evidence: 26/26 targeted tests green (cross-checked live: 26 passed in
+  17.11s), full backend regression green at the commit
+  (`1064` before + ticket-06 additions).
+
+## Decision record (2026-08-16): `export_stix` deferred — Ticket 07 is unblocked
+
+- **DECISION:** Ticket 07 **can start without `export_stix`**. Ticket 01
+  already commits the offline MITRE v15 fixture
+  (`backend/fixtures/mitre_attack_v15.yaml`, 780 techniques, provenance
+  `source: mitre_attack_stix_15.1`) and reads it deterministically — the
+  fixture generator's `fetch_stix`/`--bundle PATH` mode already covers the
+  STIX source need without the typed wrapper.
+- **`export_stix` stays a separate runtime/STIX follow-up**, owned by
+  `issues/06B-export-stix.md` (status NEEDS_DECISION, blocked). Unblock
+  conditions: (1) the tool appears in the real MCP tool list, or (2) the owner
+  provides an official schema contract. After either, required tests:
+  success-shape, fallback (5 degradation paths → `{}`), and secret-leak
+  (API key never re-emitted). No stub / fake result / roadmap-based wrapper /
+  invented schema — the standing «не выдумывай контракт» gate applies.
+- **Boundary:** Ticket 06 stays `partially-implemented`; the three verified
+  methods are accepted independently and `export_stix` is explicitly NOT part
+  of that acceptance. Production code, tests, schemas and MCP config were not
+  touched by this bookkeeping step.
+
+## Ticket 07 — resolved (see `issues/07-normalizer-extractions.md`)
+
+- Three pure extraction blocks appended to `threadlinqs_normalizer.py`:
+  `_extract_simulations` → `adversary_playbooks`, `_extract_pivots` →
+  `infrastructure_pivots`, `_extract_similar_threats` → `related_threats`,
+  over a shared `_extract_text_items` helper (str trim, dict text-key
+  priority, `dict.fromkeys` order-preserving dedupe). Pivot dicts keep only
+  scalar values (nested dicts/lists/None dropped, empties excluded) and are
+  deduped by canonical sorted-key JSON — first occurrence wins.
+- Contract: missing/None/malformed/wrong-type input → `[]`, never an
+  exception; extracted text is data, never evaluated or executed (pinned by a
+  test feeding command-injection strings and an `__import__('os')` payload as
+  plain text). Prefix-key priorities: simulations
+  `("playbook", "name", "title", "value")`, threats
+  `("name", "title", "value", "id")` — unknown-key dicts skipped.
+- Wiring: `normalize_bundle` reads the three envelope keys with the existing
+  `data`-fallback convention and passes them into the `NormalizedThreat(...)`
+  constructor keywords; three `default_factory=list` fields appended to the
+  dataclass. The only constructor call site uses keyword args — byte-compatible
+  append, no positional construction anywhere in `app/` or `tests/`.
+- ADDITIVE-ONLY verified by diff: new `import json`, 3 fields, 4 functions,
+  wiring only; `_extract_indicators` / `_extract_techniques` untouched. Pivots
+  supplement IOCs, never replace them (a domain as both IOC and pivot stays in
+  both — pinned test).
+- Evidence: red phase 21 failed / 2 passed (assertion-level, missing symbols);
+  targeted **23/23 green**, existing Threadlinqs suites **72/72 green**; full
+  backend regression **1113 passed, 11 skipped**, coverage 69.48% (gate
+  `--cov-fail-under=60` passes on the full run); `ruff check` clean on the
+  changed file (`ruff format` drift pre-existing — HEAD fails format-check
+  identically; CI gates on `ruff check .`).

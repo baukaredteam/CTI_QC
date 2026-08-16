@@ -14,6 +14,7 @@ Real Threadlinqs IOC shape (as of v7.1.0):
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from dataclasses import dataclass, field
@@ -63,6 +64,9 @@ class NormalizedThreat:
     regions: list[str] = field(default_factory=list)
     ttps: list[str] = field(default_factory=list)
     raw_bundle: dict[str, Any] = field(default_factory=dict)
+    adversary_playbooks: list[str] = field(default_factory=list)
+    infrastructure_pivots: list[dict[str, Any]] = field(default_factory=list)
+    related_threats: list[str] = field(default_factory=list)
 
 
 # --- Type mapping for the real Threadlinqs IOC types ---
@@ -348,6 +352,81 @@ def _extract_attribution(bundle: dict[str, Any]) -> tuple[str, str]:
     return "", ""
 
 
+# --- Enrichment blocks (simulations / pivots / similar threats) ---
+#
+# Contract: missing, None, malformed, or wrong-typed input always returns an
+# empty list — never raises. Extracted text is data: it is never evaluated,
+# executed, or interpreted as a command.
+
+_SIMULATION_TEXT_KEYS: tuple[str, ...] = ("playbook", "name", "title", "value")
+_THREAT_TEXT_KEYS: tuple[str, ...] = ("name", "title", "value", "id")
+_PIVOT_SCALAR_TYPES: tuple[type, ...] = (str, int, float, bool)
+
+
+def _extract_text_items(payload: Any, text_keys: tuple[str, ...]) -> list[str]:
+    """Extract trimmed non-empty strings from str / keyed-dict list items."""
+    if not isinstance(payload, list):
+        return []
+    out: list[str] = []
+    for item in payload:
+        if isinstance(item, str):
+            text = item.strip()
+        elif isinstance(item, dict):
+            text = ""
+            for key in text_keys:
+                raw = item.get(key)
+                if isinstance(raw, str) and raw.strip():
+                    text = raw.strip()
+                    break
+        else:
+            continue
+        if text:
+            out.append(text)
+    return list(dict.fromkeys(out))  # dedupe, preserve order
+
+
+def _extract_simulations(payload: Any) -> list[str]:
+    """Simulations block -> adversary playbook names (list[str])."""
+    return _extract_text_items(payload, _SIMULATION_TEXT_KEYS)
+
+
+def _extract_similar_threats(payload: Any) -> list[str]:
+    """Similar-threats block -> related threat names (list[str])."""
+    return _extract_text_items(payload, _THREAT_TEXT_KEYS)
+
+
+def _extract_pivots(payload: Any) -> list[dict[str, Any]]:
+    """Infrastructure-pivots block -> safe scalar-only dicts (list[dict]).
+
+    Only scalar values (str/int/float/bool) are kept; nested dicts, lists,
+    and nulls are dropped, and dicts left empty are excluded. Dedupe is
+    canonical (sorted-key JSON), first occurrence wins.
+    """
+    if not isinstance(payload, list):
+        return []
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        cleaned: dict[str, Any] = {}
+        for key, value in item.items():
+            if isinstance(value, str):
+                value = value.strip()
+                if value:
+                    cleaned[key] = value
+            elif isinstance(value, _PIVOT_SCALAR_TYPES):
+                cleaned[key] = value
+        if not cleaned:
+            continue
+        fingerprint = json.dumps(cleaned, sort_keys=True, ensure_ascii=False)
+        if fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        out.append(cleaned)
+    return out
+
+
 def normalize_bundle(bundle: dict[str, Any]) -> NormalizedThreat:
     """Normalize a raw Threadlinqs bundle into structured threat data.
 
@@ -403,6 +482,18 @@ def normalize_bundle(bundle: dict[str, Any]) -> NormalizedThreat:
     # Attribution
     actor, actor_confidence = _extract_attribution(bundle)
 
+    # Enrichment blocks: simulations -> playbooks, infrastructure pivots,
+    # similar threats -> related threats. Absent/wrong-type -> empty lists.
+    simulations = bundle.get("simulations")
+    if simulations is None:
+        simulations = bundle.get("data", {}).get("simulations")
+    pivots = bundle.get("infrastructure_pivots")
+    if pivots is None:
+        pivots = bundle.get("data", {}).get("infrastructure_pivots")
+    similar_threats = bundle.get("similar_threats")
+    if similar_threats is None:
+        similar_threats = bundle.get("data", {}).get("similar_threats")
+
     threat = NormalizedThreat(
         bundle_id=bundle_id,
         title=title,
@@ -414,6 +505,9 @@ def normalize_bundle(bundle: dict[str, Any]) -> NormalizedThreat:
         regions=regions,
         ttps=ttps,
         raw_bundle=bundle,
+        adversary_playbooks=_extract_simulations(simulations),
+        infrastructure_pivots=_extract_pivots(pivots),
+        related_threats=_extract_similar_threats(similar_threats),
     )
 
     logger.info(
