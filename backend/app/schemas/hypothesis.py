@@ -65,3 +65,8 @@ class Hypothesis(BaseModel):
     # Ticket 04 (R2-Q3): display-only bonus = priority × 1.25 for high actor
     # confidence. Never mutates priority, never reorders the M6.1 queue.
     confidence_priority_bonus: float | None = Field(default=None)
+    # Ticket 08 (M6.4): enrichment fields filled by threadlinqs_mcp_enricher
+    # from get_threat_hunting_bundle; empty until that seam runs.
+    related_threats: list[str] = Field(default_factory=list)
+    adversary_playbooks: list[str] = Field(default_factory=list)
+    infrastructure_pivots: list[dict] = Field(default_factory=list)

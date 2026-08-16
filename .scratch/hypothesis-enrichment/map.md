@@ -231,3 +231,33 @@ cannot conflict.
   `--cov-fail-under=60` passes on the full run); `ruff check` clean on the
   changed file (`ruff format` drift pre-existing — HEAD fails format-check
   identically; CI gates on `ruff check .`).
+
+## Ticket 08 — resolved (see `issues/08-mcp-enricher.md`)
+
+- New seam `app/services/threadlinqs_mcp_enricher.py`: `enrich_hypotheses(
+  hypotheses, client) -> list[Hypothesis]` — pure (`model_copy` new objects,
+  input list never mutated), batched (one `get_threat_hunting_bundle(
+  threat_id, simulation_limit=3, pivot_limit=25)` per unique threat_id,
+  first-seen order, map-back by threat_id), pass-through on
+  `_INTEGRATION_ERRORS` = `(ThreadlinqsClientError, CircuitOpenError,
+  RateLimitExceeded, asyncio.TimeoutError, McpError)` and on bundles lacking
+  any of the three enrichment keys at depth-1/`data` (degraded `{}` included)
+  — same objects, never an exception.
+- Extraction reuses the ticket 07 `normalize_bundle` seam (single
+  envelope-reading place); `adversary_playbooks` also enriches
+  `expected_evidence_ru` with one idempotent append
+  (`"{text} adversary playbooks: A, B."`, skipped when already present).
+- Schema: three `default_factory=list` fields (related_threats,
+  adversary_playbooks, infrastructure_pivots) appended after
+  confidence_priority_bonus — Ticket 08 is the second of the 04→08→09
+  serialized appends; no migration, absent keys read as `[]`.
+- Orchestration: `scan_feed` imports the seam inside the existing `if live:`
+  lazy-import block and calls it immediately after `generate_hypotheses` when
+  `client is not None`; offline scans (client None) skip it and stay
+  byte-identical (pinned by the untouched offline integration tests).
+- Evidence: red 25/25 (`NotImplementedError`); targeted **25/25 green** +
+  new live-path scanner integration test (fake live client, one batched call
+  `("TL-2026-1693", 3, 25)`, all three fields + evidence phrase on persisted
+  rows) — scanner suite 4/4; full backend regression **1139 passed,
+  11 skipped** in 95.65s; `ruff check` clean on changed files (lone ASYNC230
+  in `scripts/coverage_live_smoke.py` is pre-existing, file untouched).

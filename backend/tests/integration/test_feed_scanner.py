@@ -163,3 +163,62 @@ async def test_scan_feed_respects_relevance_threshold(tmp_path, caplog):
         "generated" in record.message and "tenant finance" in record.message
         for record in caplog.records
     )
+
+
+class _FakeLiveClient:
+    """Stand-in for ThreadlinqsClient during a live scan; no network."""
+
+    def __init__(self, api_key: str = ""):
+        self.api_key = api_key
+        self.bundle_calls: list[tuple[str, int, int]] = []
+
+    async def get_mitre_technique(self, technique_id: str) -> dict | None:
+        return None
+
+    async def get_threat_hunting_bundle(
+        self, threat_id: str, simulation_limit: int = 3, pivot_limit: int = 25
+    ) -> dict:
+        self.bundle_calls.append((threat_id, simulation_limit, pivot_limit))
+        return {
+            "id": threat_id,
+            "title": "Sauri",
+            "similar_threats": [{"name": "Kasablanka"}, {"name": "Sandworm"}],
+            "simulations": [{"playbook": "Port Scan"}, {"playbook": "C2 Beacon"}],
+            "infrastructure_pivots": [{"ipv4": "203.0.113.7", "asn": "AS1234"}],
+        }
+
+
+@pytest.mark.skipif(not _RULES_YAML.exists(), reason="full_rules85.yaml fixture not present")
+async def test_scan_feed_live_path_enriches_hypotheses(tmp_path, monkeypatch):
+    """Ticket 08: a live scan decorates hypotheses with MCP bundle facts before
+    persistence — one ``get_threat_hunting_bundle`` call per threat with the
+    ticket's fixed limits."""
+    from app.core.config import settings
+
+    fake = _FakeLiveClient("test-key")
+    monkeypatch.setattr(settings, "threadlinqs_enabled", True)
+    monkeypatch.setattr(settings, "redis_url", "")
+    monkeypatch.setattr(
+        "app.services.threadlinqs_client.ThreadlinqsClient",
+        lambda api_key="": fake,
+    )
+
+    report = await scan_feed(
+        fetch_recent=_mock_use_feed_recent,
+        bundle_loader=_mock_bundle_loader,
+        rules_path=_RULES_YAML,
+        tenants=[require_tenant("finance")],
+        store_path=tmp_path / "hypotheses.json",
+        enrich=True,
+    )
+
+    assert report["generated"] >= 1
+    assert fake.bundle_calls == [("TL-2026-1693", 3, 25)]
+
+    rows = list_hypotheses(tenant_id="finance")
+    assert rows
+    for row in rows:
+        assert row.related_threats == ["Kasablanka", "Sandworm"]
+        assert row.adversary_playbooks == ["Port Scan", "C2 Beacon"]
+        assert row.infrastructure_pivots == [{"ipv4": "203.0.113.7", "asn": "AS1234"}]
+        assert "adversary playbooks: Port Scan, C2 Beacon." in row.expected_evidence_ru
