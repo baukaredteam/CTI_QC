@@ -157,7 +157,10 @@ async def scan_feed(
         from app.services.technique_enrichment import enrich_technique_maps
         from app.services.threadlinqs_cache import ThreadlinqsCache
         from app.services.threadlinqs_client import ThreadlinqsClient
-        from app.services.threadlinqs_mcp_enricher import enrich_hypotheses
+        from app.services.threadlinqs_mcp_enricher import (
+            enrich_hypotheses,
+            enrich_predictions,
+        )
 
         client = ThreadlinqsClient(settings.threadlinqs_api_key)
         if settings.redis_url:
@@ -200,10 +203,13 @@ async def scan_feed(
                 technique_names=technique_names,
                 min_relevance=min_relevance,
             )
-            # Ticket 08 (M6.4): live scans enrich from the MCP bundle seam;
-            # offline scans (client None) stay byte-identical to the pure path.
+            # Ticket 08/09B (M6.4): live scans enrich from the MCP bundle seam
+            # and predict next techniques; both share one client + cache, and
+            # both are passthrough when the MCP is unavailable. Offline scans
+            # (client None) stay byte-identical to the pure path.
             if client is not None:
                 hypotheses = await enrich_hypotheses(hypotheses, client)
+                hypotheses = await enrich_predictions(hypotheses, client, cache)
             generated += add_many(hypotheses)
             logger.info(
                 "Scanned threat %s, generated %d hypotheses for tenant %s",
