@@ -508,8 +508,10 @@ async def test_cache_hit_performs_no_mcp_call():
 
 
 async def test_cache_miss_calls_then_puts_with_seven_day_ttl():
+    # Production construction (feed_scanner / management_service): the cache
+    # itself must default technique entries to 7 days — no ttl_hours override.
     redis = _FakeRedis()
-    cache = ThreadlinqsCache(redis, ttl_hours=enricher.TECHNIQUE_CACHE_TTL_HOURS)
+    cache = ThreadlinqsCache(redis)
     client = FakeThreadlinqsClient(predictions={"T1078": _transition_envelope()})
     rows = [_hypothesis()]
 

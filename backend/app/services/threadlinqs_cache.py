@@ -16,6 +16,8 @@ logger = logging.getLogger(__name__)
 
 # Default TTL: 24 hours
 DEFAULT_CACHE_TTL_HOURS = 24
+# Technique metadata default TTL: 7 days
+DEFAULT_TECHNIQUE_CACHE_TTL_HOURS = 7 * 24
 
 
 def _cache_key(bundle_id: str) -> str:
@@ -36,11 +38,18 @@ class ThreadlinqsCache:
     Args:
         redis: An async Redis client instance (aioredis-compatible).
         ttl_hours: Hours to keep cached bundles.
+        technique_ttl_hours: Hours to keep cached technique metadata.
     """
 
-    def __init__(self, redis: Any, ttl_hours: int = DEFAULT_CACHE_TTL_HOURS) -> None:
+    def __init__(
+        self,
+        redis: Any,
+        ttl_hours: int = DEFAULT_CACHE_TTL_HOURS,
+        technique_ttl_hours: int = DEFAULT_TECHNIQUE_CACHE_TTL_HOURS,
+    ) -> None:
         self._redis = redis
         self._ttl_seconds = ttl_hours * 3600
+        self._technique_ttl_seconds = technique_ttl_hours * 3600
 
     async def get(self, bundle_id: str) -> dict[str, Any] | None:
         """Retrieve a cached bundle by its ID.
@@ -126,6 +135,6 @@ class ThreadlinqsCache:
         key = _technique_cache_key(technique_id)
         try:
             serialized = json.dumps(meta, default=str)
-            await self._redis.set(key, serialized, ex=self._ttl_seconds)
+            await self._redis.set(key, serialized, ex=self._technique_ttl_seconds)
         except Exception:
             logger.warning("Redis SET failed for key %s", key, exc_info=True)
