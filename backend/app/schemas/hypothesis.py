@@ -70,3 +70,6 @@ class Hypothesis(BaseModel):
     related_threats: list[str] = Field(default_factory=list)
     adversary_playbooks: list[str] = Field(default_factory=list)
     infrastructure_pivots: list[dict] = Field(default_factory=list)
+    # Ticket 09 (M6.4): predicted next techniques from predict_mitre_transitions,
+    # UI-ready projection keeps only attack_flow-basis entries.
+    predicted_next_techniques: list[dict] = Field(default_factory=list)
