@@ -261,3 +261,28 @@ cannot conflict.
   rows) — scanner suite 4/4; full backend regression **1139 passed,
   11 skipped** in 95.65s; `ruff check` clean on changed files (lone ASYNC230
   in `scripts/coverage_live_smoke.py` is pre-existing, file untouched).
+
+## Ticket 11 — smoke + guardrail done; GATE scan blocked on user review (see `issues/11-acceptance-and-smoke.md`)
+
+- **API-key leak fixed**: the smoke script printed `api_key[:6]` in its banner;
+  now prints the inert marker `configured=true` and never the key or a prefix.
+- **Four-tool smoke section** live-validated against the real v7.1.0 server:
+  `get_threat_hunting_bundle` → PASS (registered; real envelope), `export_stix`
+  → NOT_AVAILABLE (absent from the 54-tool registry — consistent with 06B
+  NEEDS_DECISION), `get_attack_flow` and `predict_mitre_transitions` →
+  EMPTY_FALLBACK (absent from registry) — honest statuses, never faked;
+  exit 0. `_process_bundle` now uses the ticket-06-verified
+  `{threat_id}`-schema call.
+- **Guardrail acceptance test** `backend/tests/unit/test_smoke_guardrail.py`
+  (5 tests, `test_mitre_meta.py` source-guard convention): AST scan — no
+  `print()` may reference `api_key` in any form; no key-prefix slice anywhere;
+  configured path prints exactly `configured=true`; no-key behavior — skip
+  notice, exit 0, no connect. 5/5 green; ruff clean.
+- Evidence: full backend regression **1181 passed, 11 skipped**, coverage
+  69.68% (gate `--cov-fail-under=60` passes); smoke exit 0 live.
+- **Status `ready-for-human`**: the two live GATE scan runs
+  (`threadlinqs_enabled=True` / `False`), the contract 3.6 quality gate, and
+  e2e `hypotheses.spec` remain blocked per PROJECT_STATUS STOP-for-review gate
+  ("run the first live feed scan ONLY after user review of this slice") and
+  the missing `DB_PASS` for e2e — recorded as documented limitations, not
+  failures.
