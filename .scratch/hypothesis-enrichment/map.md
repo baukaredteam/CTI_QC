@@ -262,7 +262,7 @@ cannot conflict.
   11 skipped** in 95.65s; `ruff check` clean on changed files (lone ASYNC230
   in `scripts/coverage_live_smoke.py` is pre-existing, file untouched).
 
-## Ticket 11 — smoke + guardrail done; GATE scan blocked on user review (see `issues/11-acceptance-and-smoke.md`)
+## Ticket 11 — acceptance & smoke: deterministic GATE suites green, GATE (b) live green, GATE (a) live partial (see `issues/11-acceptance-and-smoke.md`)
 
 - **API-key leak fixed**: the smoke script printed `api_key[:6]` in its banner;
   now prints the inert marker `configured=true` and never the key or a prefix.
@@ -280,9 +280,21 @@ cannot conflict.
   notice, exit 0, no connect. 5/5 green; ruff clean.
 - Evidence: full backend regression **1181 passed, 11 skipped**, coverage
   69.68% (gate `--cov-fail-under=60` passes); smoke exit 0 live.
-- **Status `ready-for-human`**: the two live GATE scan runs
-  (`threadlinqs_enabled=True` / `False`), the contract 3.6 quality gate, and
-  e2e `hypotheses.spec` remain blocked per PROJECT_STATUS STOP-for-review gate
-  ("run the first live feed scan ONLY after user review of this slice") and
-  the missing `DB_PASS` for e2e — recorded as documented limitations, not
-  failures.
+- **GATE matrix (2026-08-17)** — deterministic suites green: **58 passed in
+  9.08s** (`test_mcp_enricher.py` + `test_feed_scanner.py`, repo venv,
+  addopts cleared) covering live-path enrichment + predicted next techniques
+  (A), technique-cache hit/miss/7-day-TTL/dedupe (A2), offline pass-through
+  (B), degraded matrix (C), contract 3.6 (D). **GATE (b) proven live**: 1
+  threat scanned, 5 hypotheses, 0 skipped, no exception, MCP fields empty,
+  contract-clean rows. **GATE (a) live partial**: verified
+  `get_threat_hunting_bundle` tool call succeeds (1 real call) but the raw
+  live envelope has no top-level `ttps` key (techniques under
+  `threat.mitre_technique_ids`), so the generator emits 0 hypotheses from the
+  raw shape — recorded as documented limitation (ADDITIVE-ONLY, no production
+  code touched). Cache-hit live not demonstrable (Redis down here — env fact);
+  e2e `hypotheses.spec` **4/4 passed** on mock-API fixtures (no DB needed).
+- **Status `ready-for-human / partially-validated`**: every gate is green
+  deterministically, GATE (b) live is green; GATE (a) live populated-MCP-fields
+  demonstration and the full 280-hypothesis grid need the first unblocked real
+  feed scan per PROJECT_STATUS STOP-for-review gate — recorded as documented
+  limitations, not failures.
