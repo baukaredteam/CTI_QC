@@ -24,6 +24,15 @@ const STATUS_STYLE: Record<string, string> = {
   rejected: 'border-red-500/40 bg-red-950/30 text-red-200',
 };
 
+function scalarEntries(pivot: Record<string, unknown>): Array<[string, string]> {
+  return Object.entries(pivot).flatMap(([key, value]) => {
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      return [[key, String(value)]];
+    }
+    return [];
+  });
+}
+
 export function Hypotheses() {
   const qc = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -128,6 +137,14 @@ function HypothesisRow({ row, onUpdate }: { row: Hypothesis; onUpdate: (next: 'v
   const hypothesis = row;
   const { admiralty } = hypothesis;
   const canReview = hypothesis.status === 'proposed';
+  const relatedThreats = hypothesis.related_threats ?? [];
+  const playbooks = hypothesis.adversary_playbooks ?? [];
+  const pivots = hypothesis.infrastructure_pivots ?? [];
+  const pivotRows = pivots.flatMap((pivot, pivotIndex) => {
+    const entries = scalarEntries(pivot);
+    return entries.length > 0 ? [{ key: `${pivotIndex}`, entries }] : [];
+  });
+  const predictions = (hypothesis.predicted_next_techniques ?? []).filter(item => item.basis === 'attack_flow');
 
   return (
     <div className="p-4">
@@ -144,7 +161,14 @@ function HypothesisRow({ row, onUpdate }: { row: Hypothesis; onUpdate: (next: 'v
           {hypothesis.coverage_status}
         </span>
         <span className="text-xs text-gray-400">Admiralty: <b className="font-mono text-gray-200">{admiralty.letter}-{admiralty.digit}</b></span>
-        <span className="text-xs text-gray-500">Priority: <b className="font-mono text-gray-300">{hypothesis.priority.toFixed(3)}</b></span>
+        <span className="text-xs text-gray-500">
+          Priority: <b className="font-mono text-gray-300">{hypothesis.priority.toFixed(3)}</b>
+          {hypothesis.confidence_priority_bonus !== null && hypothesis.confidence_priority_bonus !== undefined && (
+            <span className="ml-2 rounded border border-sky-500/40 bg-sky-950/30 px-2 py-0.5 font-mono text-[10px] text-sky-200">
+              High-confidence bonus: +{hypothesis.confidence_priority_bonus.toFixed(3)}
+            </span>
+          )}
+        </span>
       </div>
 
       <p className="mt-2 text-sm leading-6 text-gray-300">{hypothesis.text_ru}</p>
@@ -153,6 +177,53 @@ function HypothesisRow({ row, onUpdate }: { row: Hypothesis; onUpdate: (next: 'v
       )}
       {hypothesis.expected_evidence_ru && (
         <p className="mt-1 text-xs leading-5 text-gray-500">{hypothesis.expected_evidence_ru}</p>
+      )}
+
+      {relatedThreats.length > 0 && (
+        <div className="mt-2 space-y-1">
+          <span className="text-[10px] uppercase tracking-wide text-gray-500">Related threats</span>
+          <p className="text-xs text-gray-400">{relatedThreats.join(' · ')}</p>
+        </div>
+      )}
+
+      {playbooks.length > 0 && (
+        <div className="mt-2 space-y-1">
+          <span className="text-[10px] uppercase tracking-wide text-gray-500">Adversary playbooks</span>
+          <p className="text-xs text-gray-400">{playbooks.join(' · ')}</p>
+        </div>
+      )}
+
+      {pivotRows.length > 0 && (
+        <div className="mt-2 space-y-1">
+          <span className="text-[10px] uppercase tracking-wide text-gray-500">Infrastructure pivots</span>
+          {pivotRows.map(row => (
+            <p key={row.key} className="text-xs text-gray-400">
+              {row.entries.map(([key, value], entryIndex) => (
+                <span key={`${row.key}-${entryIndex}`}>
+                  {entryIndex > 0 && <span> · </span>}
+                  <span className="font-mono">{key}</span>: <span className="text-gray-300">{value}</span>
+                </span>
+              ))}
+            </p>
+          ))}
+        </div>
+      )}
+
+      {predictions.length > 0 && (
+        <div className="mt-2 space-y-1">
+          <span className="text-[10px] uppercase tracking-wide text-sky-300">Predicted next techniques</span>
+          {predictions.map(item => {
+            const probability = typeof item.probability === 'number' && Number.isFinite(item.probability) ? item.probability : null;
+            return (
+              <p key={item.technique_id} className="rounded border border-sky-500/20 bg-sky-950/10 px-2 py-1 text-xs text-sky-100/80">
+                <span className="font-mono">{item.technique_id}</span>
+                {item.name ? <> — {item.name}</> : null}
+                {probability !== null && <span className="font-mono"> · {probability.toFixed(3)}</span>}
+                <span className="text-sky-300/70"> [attack_flow]</span>
+              </p>
+            );
+          })}
+        </div>
       )}
 
       {hypothesis.actor && (

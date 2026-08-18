@@ -4150,6 +4150,16 @@ export interface Hypothesis {
   sectors: string[];
   iocs: HypothesisIoc[];
   data_sources: string[];
+  confidence_priority_bonus: number | null;
+  related_threats: string[];
+  adversary_playbooks: string[];
+  infrastructure_pivots: Array<Record<string, unknown>>;
+  predicted_next_techniques: Array<{
+    technique_id: string;
+    name: string;
+    probability: number | null;
+    basis: string;
+  }>;
   created_at: string;
   updated_at: string;
 }
