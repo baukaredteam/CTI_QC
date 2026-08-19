@@ -180,11 +180,48 @@ attack_flow tags / absent enrichment sections on legacy rows).
 
 **Summary of honest gaps recorded as documented limitations (not failures):**
 1. GATE (a) live scan with populated MCP fields needs the first unblocked real
-   feed scan + a raw-envelope→flat normalization seam (out of scope: ADDITIVE
-   ONLY, production untouched).
+   feed scan. The raw-envelope→flat normalization seam part of this gap is
+   CLOSED by Ticket 11.1 (see below); only the live first feed scan remains
+   user-gated.
 2. Live cache-hit demonstration needs Redis up (down here per env facts).
 3. e2e-vs-backend needs `DB_PASS` (placeholder only); mock-API e2e already
    green 4/4.
 4. The 280-hypothesis full-GATE number is a prior-art M6.3 grid figure; the
    deterministic suites fix the per-threat arithmetic, the full-grid number is
    re-checkable only on a real unblocked feed scan.
+
+### Ticket 11.1 (2026-08-17) — the raw-envelope→flat normalization seam
+
+Closed the shape gap recorded above (gap 1, second half): the live v7.1.0
+`get_threat_hunting_bundle` envelope and the offline canonical flat input now
+share one adapter, `flatten_bundle` (Ticket 11.1, additive production change).
+
+What was proven, with evidence:
+
+1. **The gap was real (TDD red first).** `backend/tests/unit/test_flatten_bundle.py`
+   drives the seam with the recorded envelope shape (sanitized values). Before
+   the adapter, flattening the live envelope lost every technique ID: the IDs
+   live under `threat.mitre_technique_ids` / `threat.mitre_attack.technique_ids`
+   / the top-level `mitre_technique_ids` key, none of which the canonical
+   extractor reads — the generator saw `Normalized bundle unknown: 0 TTPs` and
+   emitted 0 hypotheses. Red confirmed genuinely: 4/4 failing for the right
+   reason (one fixture IOC value was sanitized to carry no MITRE ID so no
+   technique leaked through a side path).
+2. **The adapter is additive and idempotent.** `flatten_bundle` now merges the
+   `threat` sub-dict (identity/sectors/regions), preserves the enrichment
+   blocks (`simulations`, `similar_threats`, `infrastructure_pivots`, `iocs`),
+   and hoists every technique-ID source into the canonical `ttps` list
+   (deduped, order-preserving). Flat canonical bundles (no `threat` key, `ttps`
+   present) pass through unchanged, so the offline deterministic path is
+   byte-identical. `scan_feed` routes the loader output through the same
+   adapter (idempotent), so a live raw-envelope loader reaches the generator
+   intact.
+3. **Green + regression.** `test_flatten_bundle.py` 4/4 green; integration
+   `test_feed_scanner.py` 16/16 green; full backend suite **1185 passed,
+   11 skipped** (baseline 1181 + the 4 new tests); ruff clean on the three
+   changed files (`management_service.py`, `feed_scanner.py`,
+   `test_flatten_bundle.py`).
+
+Still user-gated (outside code reach): the first unblocked live feed scan
+(PROJECT_STATUS: STOP for review first) and the live cache-hit demo (Redis
+down here per env facts).

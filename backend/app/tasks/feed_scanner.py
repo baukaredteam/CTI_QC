@@ -21,7 +21,11 @@ from typing import Any, Mapping, Sequence
 from app.core.config import settings
 from app.services.hypothesis_generator import generate_hypotheses
 from app.services.hypothesis_store import add_many, save_to_file
-from app.services.management_service import DEFAULT_THREAT_ID, load_flat_bundle
+from app.services.management_service import (
+    DEFAULT_THREAT_ID,
+    flatten_bundle,
+    load_flat_bundle,
+)
 from app.services.rules_parser import Rule, parse_rules_file
 from app.services.tenants_provider import all_tenants
 from app.tasks.celery_app import celery_app
@@ -181,7 +185,11 @@ async def scan_feed(
             logger.warning("Bundle failed for %s; skipping", threat_id, exc_info=True)
             skipped += 1
             continue
-        flat = bundle if isinstance(bundle, dict) else dict(bundle or {})
+        # Ticket 11.1: the loader may return the raw live v7.1.0 envelope;
+        # flatten_bundle is idempotent for canonical flat bundles (no
+        # ``threat`` key) and hoists technique IDs to ``ttps`` for the
+        # recorded live shape, so both paths reach the generator intact.
+        flat = flatten_bundle(bundle if isinstance(bundle, dict) else dict(bundle or {}))
         tactic_map = _tactic_map(flat)
         technique_names: dict[str, str] | None = None
         if live:

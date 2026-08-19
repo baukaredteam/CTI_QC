@@ -535,8 +535,62 @@ def _parse_mcp_result(result: Any) -> Any:
 
 
 def flatten_bundle(bundle: Mapping[str, Any]) -> dict[str, Any]:
-    """Merge a raw API envelope {threat, iocs, ...} into a flat dict."""
-    flat = dict(bundle.get("threat") if isinstance(bundle.get("threat"), dict) else bundle)
+    """Merge a raw API envelope {threat, iocs, ...} into a flat dict.
+
+    Ticket 11.1 adapter for the live v7.1.0 ``get_threat_hunting_bundle``
+    envelope shape: the threat record is nested under ``threat`` and the
+    technique IDs live under ``threat.mitre_technique_ids`` /
+    ``threat.mitre_attack.technique_ids`` plus the top-level
+    ``mitre_technique_ids`` key — none of which the canonical extractor reads
+    (it reads ``ttps``). The adapter:
+      - merges the ``threat`` sub-dict up (identity, sectors, regions),
+      - preserves the top-level enrichment blocks the generator consumes
+        (``simulations``, ``similar_threats``, ``infrastructure_pivots``,
+        ``iocs``),
+      - hoists every technique-ID source into the canonical ``ttps`` list
+        (deduped, order-preserving).
+
+    Already-flat canonical bundles (no ``threat`` key, ``ttps`` present) pass
+    through unchanged — idempotent for the offline deterministic path.
+    """
+    threat = bundle.get("threat")
+    if isinstance(threat, dict):
+        flat = dict(threat)
+        for key in (
+            "iocs",
+            "detections",
+            "simulations",
+            "similar_threats",
+            "infrastructure_pivots",
+            "mitre_technique_ids",
+            "mitre_tactic_ids",
+        ):
+            if key in bundle and key not in flat:
+                flat[key] = bundle[key]
+        # Canonical sector/region keys (the normalizer reads target_* too, but
+        # the canonical flat shape spells them ``sectors``/``regions``).
+        if "sectors" not in flat:
+            flat["sectors"] = flat.get("target_sectors", [])
+        if "regions" not in flat:
+            flat["regions"] = flat.get("target_regions", [])
+        # Canonical ttps: union of every technique-ID source in the envelope.
+        technique_ids: list[str] = []
+        for source in (
+            flat.get("mitre_technique_ids"),
+            isinstance(threat.get("mitre_attack"), dict)
+            and threat["mitre_attack"].get("technique_ids"),
+            bundle.get("mitre_technique_ids"),
+        ):
+            if not isinstance(source, list):
+                continue
+            for tid in source:
+                tid = str(tid).strip()
+                if tid and tid not in technique_ids:
+                    technique_ids.append(tid)
+        if technique_ids and "ttps" not in flat:
+            flat["ttps"] = technique_ids
+        return flat
+    flat = dict(bundle)
     if "iocs" in bundle and "iocs" not in flat:
         flat["iocs"] = bundle["iocs"]
     return flat
