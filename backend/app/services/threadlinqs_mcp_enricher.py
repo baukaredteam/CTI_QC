@@ -42,6 +42,7 @@ from app.schemas.hypothesis import Hypothesis
 from app.services.circuit_breaker import CircuitOpenError
 from app.services.rate_limiter import RateLimitExceeded
 from app.services.threadlinqs_client import ThreadlinqsClientError
+from app.services.management_service import flatten_bundle
 from app.services.threadlinqs_normalizer import normalize_bundle
 
 # Integration failures a live client may still surface; everything else is a
@@ -103,7 +104,7 @@ def _enrich_expected_evidence(text: str, playbooks: Sequence[str]) -> str:
 
 def _enriched(h: Hypothesis, bundle: Mapping[str, Any]) -> Hypothesis:
     """Return an enriched copy, or ``h`` itself when nothing new was carried."""
-    normalized = normalize_bundle(dict(bundle))
+    normalized = normalize_bundle(flatten_bundle(dict(bundle)))
     playbooks = list(getattr(normalized, "adversary_playbooks", []) or [])
     related = list(getattr(normalized, "related_threats", []) or [])
     pivots = list(getattr(normalized, "infrastructure_pivots", []) or [])

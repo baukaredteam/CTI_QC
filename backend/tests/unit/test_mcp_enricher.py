@@ -675,6 +675,101 @@ async def test_enrich_hypotheses_direct_os_error_propagates():
 
 
 # ---------------------------------------------------------------------------
+# Ticket 11.3 — enrichment seam shape gap (nested live envelope)
+# ---------------------------------------------------------------------------
+
+_LIVE_ENVELOPE_NESTED: dict = {
+    "threat": {
+        "id": "TL-2026-1693",
+        "title": "Sauri",
+        "simulations": [{"playbook": "Ransomware drill"}, {"playbook": "C2 beaconing"}],
+        "similar_threats": [{"name": "Kasablanka"}, {"name": "Sandworm"}],
+        "infrastructure_pivots": [{"ip": "10.0.0.1"}],
+    },
+    "simulations": [],
+    "similar_threats": [],
+    "infrastructure_pivots": [],
+    "iocs": {"network": [], "file": []},
+    "mitre_technique_ids": ["T1027"],
+}
+
+
+def _nested_envelope_client():
+    return FakeThreadlinqsClient({"TL-2026-1693": dict(_LIVE_ENVELOPE_NESTED)})
+
+
+async def test_enrich_hypotheses_flattens_nested_live_envelope_before_normalize():
+    """Raw nested live envelope must be flattened before normalization.
+
+    Ticket 11.3: the live v7.1.0 envelope carries enrichment blocks nested
+    under ``threat`` (non-empty) but top-level blocks are empty lists.
+    ``enrich_hypotheses`` must flatten the raw envelope so that
+    ``normalize_bundle`` sees the promoted enrichment blocks.
+    """
+    client = _nested_envelope_client()
+    rows = [_hypothesis()]
+    result = await enrich_hypotheses(rows, client)
+
+    assert result[0].adversary_playbooks == ["Ransomware drill", "C2 beaconing"]
+    assert result[0].related_threats == ["Kasablanka", "Sandworm"]
+    assert result[0].infrastructure_pivots == [{"ip": "10.0.0.1"}]
+
+
+async def test_enrich_hypotheses_preserves_flat_envelope_behavior():
+    """Existing flat envelope behavior must remain unchanged."""
+    client = FakeThreadlinqsClient({_envelope()["id"]: _envelope()})
+    rows = [_hypothesis()]
+    result = await enrich_hypotheses(rows, client)
+
+    assert result[0].adversary_playbooks == ["Port Scan", "C2 Beacon"]
+    assert result[0].related_threats == ["Kasablanka", "Sandworm"]
+    assert result[0].infrastructure_pivots == [{"ipv4": "203.0.113.7", "asn": "AS1234"}]
+
+
+async def test_enrich_hypotheses_keeps_pass_through_without_enrichment_keys():
+    """Envelope without enrichment keys must pass through unchanged."""
+    client = FakeThreadlinqsClient({"TL-2026-1693": {"id": "TL-2026-1693", "title": "Sauri"}})
+    rows = [_hypothesis()]
+    result = await enrich_hypotheses(rows, client)
+
+    assert result[0] is rows[0]
+    assert result[0].related_threats == []
+
+
+async def test_enrich_hypotheses_is_idempotent_for_expected_evidence():
+    """Re-enriching must not duplicate the playbook phrase."""
+    client = _nested_envelope_client()
+    rows = [_hypothesis()]
+    once = await enrich_hypotheses(rows, client)
+    twice = await enrich_hypotheses(once, client)
+
+    assert "adversary playbooks" in once[0].expected_evidence_ru
+    assert once[0].expected_evidence_ru == twice[0].expected_evidence_ru
+
+
+async def test_enrich_hypotheses_does_not_mutate_input_rows():
+    """Input hypothesis list and objects must not be mutated."""
+    client = _nested_envelope_client()
+    rows = [_hypothesis()]
+    before = list(rows)
+    before_related = rows[0].related_threats[:]
+    await enrich_hypotheses(rows, client)
+
+    assert rows == before
+    assert all(a is b for a, b in zip(rows, before, strict=True))
+    assert rows[0].related_threats == before_related
+
+
+async def test_enrich_hypotheses_handles_malformed_bundle_without_exception():
+    """Malformed bundle (non-dict) must not raise; pass-through expected."""
+    client = FakeThreadlinqsClient(non_dict=True)
+    rows = [_hypothesis()]
+    result = await enrich_hypotheses(rows, client)
+
+    assert result[0] is rows[0]
+
+
+# ---------------------------------------------------------------------------
 # Ticket 09 — predicted_next_techniques enrichment (existing tests)
 # ---------------------------------------------------------------------------
 
