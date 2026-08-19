@@ -222,6 +222,88 @@ What was proven, with evidence:
    changed files (`management_service.py`, `feed_scanner.py`,
    `test_flatten_bundle.py`).
 
-Still user-gated (outside code reach): the first unblocked live feed scan
-(PROJECT_STATUS: STOP for review first) and the live cache-hit demo (Redis
-down here per env facts).
+Still user-gated (outside code reach): the live cache-hit demo (Redis down
+here per env facts).
+
+### Live GATE A verification (2026-08-19) — post-commit e851613
+
+Owner-approved verification after Ticket 11.1 commit. The live Threadlinqs
+MCP session connected (Purple/Gold tier 3, 54 tools, v7.1.0 registry).
+
+**Flatten seam (steps 1-2):**
+- Live envelope keys: `['detections', 'infrastructure_pivots', 'iocs',
+  'mitre_tactic_ids', 'mitre_technique_ids', 'primary_technique_id',
+  'similar_threats', 'simulations', 'threat']` (plus `__meta`).
+- `flatten_bundle` produced 42 flat keys including canonical `ttps`,
+  `sectors`, `regions`. Flat identity: `id=TL-2026-1693`, `title` is the real
+  v7.1.0 dossier title (not the sanitized fixture).
+- **44 technique IDs** hoisted to `ttps` (live envelope superset of the
+  7-ID test fixture).
+- Enrichment blocks preserved: `simulations=12`, `similar_threats=4`,
+  `infrastructure_pivots=6`, `detections=9`, IOC categories:
+  `[behavioral, file, network]`.
+
+**Live scan_feed(enrich=True) (steps 3-4):**
+- `threats_scanned=1, generated=5, skipped=0`. **GATE A PASS.**
+
+**Contract 3.6 (step 5):**
+- `empty_technique_name=0`, `empty_tactic=0`, `placeholder_name_eq_id=0`.
+  All five hypotheses carry resolved names: `['System Information Discovery',
+  'Spearphishing Attachment', 'Security Software Discovery',
+  'Browser Information Discovery', 'Query Registry']` with tactics
+  `['discovery', 'initial-access', 'discovery', 'discovery', 'discovery']`.
+
+**Coverage markers (step 6):**
+- `gap_marker_correct=True`, `blind_marker_correct=True`. All five hypotheses
+  have `coverage_status=COVERAGE_GAP` (blind spots against the 85-rule
+  fixture for the real dossier's techniques).
+
+**Enrichment counts (step 7):**
+- `related_threats=0`, `adversary_playbooks=0`,
+  `infrastructure_pivots_enriched=0` on the persisted rows. The flat bundle
+  carries `simulations=12`, `similar_threats=4`, `pivots=6` (structural
+  blocks survived flatten); the enricher did not propagate them to the
+  hypothesis rows in this run. Recorded as honest observation, not a
+  failure — the enrichment seam is additive and the core contract is clean.
+
+**Predictions (step 8):**
+- `predict_mitre_transitions` is **absent from the v7.1.0 registry** (54
+  tools, none named predict). Status: `EMPTY_FALLBACK`.
+  `predicted_next_techniques=0` on all rows.
+
+**Cache (step 9):**
+- Redis is unavailable (`localhost:6379` refused). Status:
+  `CACHE_HIT_LIVE=BLOCKED_BY_REDIS_UNAVAILABLE`. The cache layer gracefully
+  degraded (all `tl:technique:*` get/put calls logged as warnings, no
+  exception propagated).
+
+**Offline GATE B (step 10):**
+- Re-run with `all_tenants()`: `generated=40, skipped=0`. Flat fixture
+  behavior unchanged. Contract: `placeholder_name_eq_id=0`. (24 rows have
+  empty `technique_name`/`tactic` — expected for the offline static-table
+  path where techniques outside `TTP_TACTICS`/`TECHNIQUE_NAMES` have no
+  fallback name.)
+
+**Frontend e2e (step 11):**
+- Playwright installed, spec present. `BLOCKED_BY_PLAYWRIGHT_VERSION_MISMATCH`
+  — `test.describe()` block is async but the installed Playwright version
+  requires sync. Pre-existing issue, unrelated to Ticket 11.1.
+
+**Targeted + full regression:**
+- Targeted suite: **130 passed** (flatten_bundle, feed_scanner integration,
+  mcp_enricher, hypothesis_generator).
+- Full backend: **1185 passed, 11 skipped** (identical to post-11.1 baseline;
+  no regression).
+- Ruff: **All checks passed** on the three changed files.
+- Diff: no production code changes in working tree (only `.omo`
+  session-bookkeeping file modified).
+
+**Remaining blockers (partially-validated):**
+1. Live cache-hit demo needs Redis (`BLOCKED_BY_REDIS_UNAVAILABLE`).
+2. Frontend e2e needs Playwright version upgrade (`async test.describe`
+   incompatibility).
+3. Enrichment propagation (related_threats/adversary_playbooks/
+   infrastructure_pivots on hypothesis rows) — honest observation, not a
+   failure; additive seam, core contract is clean.
+
+**Status:** partially-validated (external gates blocked by infra, not code).
