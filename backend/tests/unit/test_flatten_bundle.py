@@ -120,6 +120,144 @@ def test_red_flatten_live_envelope_preserves_enrichment_blocks():
     assert flat.get("infrastructure_pivots")
 
 
+# ---------------------------------------------------------------------------
+# Ticket 11.2 — empty-block precedence (Part A)
+# ---------------------------------------------------------------------------
+
+_ENVELOPE_WITH_EMPTY_NESTED: dict = {
+    "threat": {
+        "id": "TL-TEST",
+        "title": "Test Threat",
+        "simulations": [],
+        "similar_threats": [],
+        "infrastructure_pivots": [],
+        "iocs": {"network": [], "file": []},
+    },
+    "simulations": [{"playbook": "Ransomware drill"}, {"playbook": "C2 beaconing"}],
+    "similar_threats": [{"name": "Kasablanka"}, {"name": "Sandworm"}],
+    "infrastructure_pivots": [{"ip": "10.0.0.1"}],
+    "iocs": {"network": [{"type": "ipv4", "value": "10.0.0.2"}], "file": []},
+    "mitre_technique_ids": ["T1027", "T1486"],
+    "mitre_tactic_ids": ["TA0005"],
+}
+
+
+def test_flatten_bundle_promotes_top_level_block_when_nested_is_empty():
+    """Top-level enrichment blocks must be promoted when nested value is empty.
+
+    Ticket 11.2: the live v7.1.0 envelope carries empty lists in the threat
+    sub-dict and populated lists at the top level. The adapter must prefer the
+    non-empty top-level value.
+    """
+    flat = flatten_bundle(dict(_ENVELOPE_WITH_EMPTY_NESTED))
+    assert flat.get("simulations") == [{"playbook": "Ransomware drill"}, {"playbook": "C2 beaconing"}]
+    assert flat.get("similar_threats") == [{"name": "Kasablanka"}, {"name": "Sandworm"}]
+    assert flat.get("infrastructure_pivots") == [{"ip": "10.0.0.1"}]
+
+
+def test_flatten_bundle_preserves_non_empty_nested_block():
+    """Non-empty nested value must NOT be overwritten by top-level value."""
+    envelope = {
+        "threat": {
+            "id": "TL-TEST",
+            "simulations": [{"playbook": "Nested Sim"}],
+            "similar_threats": [{"name": "Nested Threat"}],
+        },
+        "simulations": [{"playbook": "Top Sim"}],
+        "similar_threats": [{"name": "Top Threat"}],
+        "infrastructure_pivots": [{"ip": "10.0.0.1"}],
+        "iocs": {},
+    }
+    flat = flatten_bundle(dict(envelope))
+    assert flat.get("simulations") == [{"playbook": "Nested Sim"}]
+    assert flat.get("similar_threats") == [{"name": "Nested Threat"}]
+    assert flat.get("infrastructure_pivots") == [{"ip": "10.0.0.1"}]
+
+
+def test_flatten_bundle_handles_none_and_empty_dict():
+    """None and {} in nested block must be treated as empty (promote top-level)."""
+    envelope = {
+        "threat": {
+            "id": "TL-TEST",
+            "simulations": None,
+            "similar_threats": {},
+            "infrastructure_pivots": [],
+        },
+        "simulations": [{"playbook": "Top Sim"}],
+        "similar_threats": [{"name": "Top Threat"}],
+        "infrastructure_pivots": [{"ip": "10.0.0.1"}],
+        "iocs": {},
+    }
+    flat = flatten_bundle(dict(envelope))
+    assert flat.get("simulations") == [{"playbook": "Top Sim"}]
+    assert flat.get("similar_threats") == [{"name": "Top Threat"}]
+    assert flat.get("infrastructure_pivots") == [{"ip": "10.0.0.1"}]
+
+
+def test_flatten_bundle_missing_top_level_does_not_invent_data():
+    """When both nested and top-level are absent, no synthetic data is created."""
+    envelope = {
+        "threat": {"id": "TL-TEST"},
+        "iocs": {},
+    }
+    flat = flatten_bundle(dict(envelope))
+    assert flat.get("simulations") is None or flat.get("simulations") == []
+    assert flat.get("similar_threats") is None or flat.get("similar_threats") == []
+    assert flat.get("infrastructure_pivots") is None or flat.get("infrastructure_pivots") == []
+
+
+def test_flatten_bundle_flat_bundle_remains_idempotent():
+    """Existing offline canonical flat bundle passes through unchanged."""
+    flat_input = {
+        "id": "TL-2026-1693",
+        "title": "Sauri",
+        "sectors": ["finance"],
+        "regions": ["Global"],
+        "ttps": ["T1027", "T1486"],
+        "techniques": [{"id": "T1027", "tactic": "defense-evasion"}],
+        "iocs": {"network": [], "file": []},
+        "simulations": [{"playbook": "Drill"}],
+        "similar_threats": [{"name": "Kasablanka"}],
+        "infrastructure_pivots": [{"ip": "10.0.0.1"}],
+    }
+    flat = flatten_bundle(dict(flat_input))
+    assert flat["id"] == "TL-2026-1693"
+    assert flat["ttps"] == ["T1027", "T1486"]
+    assert flat["simulations"] == [{"playbook": "Drill"}]
+    assert flat["similar_threats"] == [{"name": "Kasablanka"}]
+    assert flat["infrastructure_pivots"] == [{"ip": "10.0.0.1"}]
+
+
+def test_flatten_bundle_does_not_mutate_input():
+    """The input mapping must not be mutated by flatten_bundle."""
+    envelope = dict(_ENVELOPE_WITH_EMPTY_NESTED)
+    original_simulations = envelope["simulations"]
+    original_threat_simulations = envelope["threat"]["simulations"]
+    flatten_bundle(envelope)
+    assert envelope["simulations"] is original_simulations
+    assert envelope["threat"]["simulations"] is original_threat_simulations
+
+
+def test_flatten_bundle_preserves_technique_union_dedupe_order():
+    """Technique IDs from all sources are merged, deduped, order-preserving."""
+    envelope = {
+        "threat": {
+            "id": "TL-TEST",
+            "mitre_technique_ids": ["T1027", "T1078"],
+            "mitre_attack": {"technique_ids": ["T1027", "T1003.002"]},
+        },
+        "mitre_technique_ids": ["T1078", "T1486", "T1027"],
+        "iocs": {},
+    }
+    flat = flatten_bundle(dict(envelope))
+    assert flat["ttps"] == ["T1027", "T1078", "T1003.002", "T1486"]
+
+
+# ---------------------------------------------------------------------------
+# Ticket 11.1 — existing RED tests (kept for regression)
+# ---------------------------------------------------------------------------
+
+
 def test_red_scan_feed_live_envelope_generates_hypotheses(tmp_path, monkeypatch):
     """scan_feed with the recorded live envelope must produce > 0 hypotheses.
 

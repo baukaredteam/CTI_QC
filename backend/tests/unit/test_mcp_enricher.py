@@ -631,6 +631,54 @@ async def test_predictions_keep_ticket08_fields():
     assert result[0].predicted_next_techniques == [_ATTACK_FLOW_ITEM]
 
 
+# ---------------------------------------------------------------------------
+# Ticket 11.2 — transport error pass-through (Part B)
+# ---------------------------------------------------------------------------
+
+
+async def test_enrich_hypotheses_threadlinqs_client_error_is_pass_through():
+    """ThreadlinqsClientError (and subclasses) must be caught by _fetch_bundle."""
+    client = FakeThreadlinqsClient(errors={"TL-2026-1693": ThreadlinqsClientError("transport down")})
+    rows = [_hypothesis()]
+    result = await enrich_hypotheses(rows, client)
+
+    assert result[0] is rows[0]
+    assert result[0].adversary_playbooks == []
+
+
+async def test_enrich_hypotheses_direct_connection_error_propagates():
+    """Direct ConnectionError from FakeClient propagates (production safe via call_tool).
+
+    In production, ThreadlinqsClient.call_tool catches ConnectionError/OSError
+    and converts them to ThreadlinqsSessionError (a ThreadlinqsClientError
+    subclass), which _INTEGRATION_ERRORS catches. This test documents that a
+    FakeClient raising ConnectionError directly bypasses that conversion and
+    propagates — which is expected because the FakeClient doesn't go through
+    call_tool. The production path is safe.
+    """
+    client = FakeThreadlinqsClient(errors={"TL-2026-1693": ConnectionError("reset by peer")})
+    rows = [_hypothesis()]
+    with pytest.raises(ConnectionError):
+        await enrich_hypotheses(rows, client)
+
+
+async def test_enrich_hypotheses_direct_os_error_propagates():
+    """Direct OSError from FakeClient propagates (production safe via call_tool).
+
+    Same reasoning as ConnectionError: production call_tool converts OSError
+    to ThreadlinqsSessionError. This test documents the boundary.
+    """
+    client = FakeThreadlinqsClient(errors={"TL-2026-1693": OSError("Network is unreachable")})
+    rows = [_hypothesis()]
+    with pytest.raises(OSError):
+        await enrich_hypotheses(rows, client)
+
+
+# ---------------------------------------------------------------------------
+# Ticket 09 — predicted_next_techniques enrichment (existing tests)
+# ---------------------------------------------------------------------------
+
+
 async def test_prediction_enrichment_deterministic_on_repeat():
     env = _transition_envelope()
     cache = FakeThreadlinqsCache()

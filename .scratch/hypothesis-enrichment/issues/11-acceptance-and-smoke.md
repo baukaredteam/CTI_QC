@@ -307,3 +307,57 @@ MCP session connected (Purple/Gold tier 3, 54 tools, v7.1.0 registry).
    failure; additive seam, core contract is clean.
 
 **Status:** partially-validated (external gates blocked by infra, not code).
+
+### Ticket 11.2 (2026-08-19) — enrichment propagation hardening
+
+**Baseline:** fd949d5 (cti_qc/main).
+
+**Confirmed flatten precedence fix:**
+- Added `_is_empty_block` helper (treats None, empty list/dict/tuple/set, blank
+  string as semantically absent; does NOT treat False/0 as empty).
+- Changed `flatten_bundle` condition from `key not in flat` to
+  `_is_empty_block(flat.get(key))`: top-level enrichment blocks are promoted
+  when the nested value is semantically empty; non-empty nested values are
+  preserved (precedence unchanged).
+- Applied to: `iocs`, `detections`, `simulations`, `similar_threats`,
+  `infrastructure_pivots`, `mitre_technique_ids`, `mitre_tactic_ids`.
+- Idempotent for canonical flat bundles (no `threat` key, blocks present).
+
+**Transport error pass-through (Part B):**
+- Production path safe: `call_tool` converts `ConnectionError`/`OSError` to
+  `ThreadlinqsSessionError` (subclass of `ThreadlinqsClientError`), caught by
+  `_INTEGRATION_ERRORS`. No production change needed.
+- Regression tests added: `ThreadlinqsClientError` pass-through (existing),
+  `ConnectionError`/`OSError` direct propagation (documents boundary).
+
+**RED result:** 2 failures in `test_flatten_bundle.py` (empty-block promotion
+bug confirmed), 54 passed. All Part B tests passed (transport errors correctly
+handled by existing code).
+
+**GREEN result:** 56/56 `test_flatten_bundle.py` + `test_mcp_enricher.py`.
+Integration feed_scanner: 16/16. Ruff: all checks passed.
+
+**Full regression:** 1195 passed, 11 skipped (baseline 1185 + 10 new tests).
+
+**Flatten precedence matrix:**
+
+| Scenario | Before | After |
+|---|---|---|
+| nested empty, top-level populated | nested empty preserved | top-level promoted |
+| nested non-empty, top-level non-empty | nested preserved | nested preserved |
+| nested None/{}, top-level populated | key absent/None | top-level promoted |
+| both absent | absent | absent (no synthetic) |
+| flat bundle, no threat | idempotent | idempotent |
+
+**Direct ConnectionError/OSError classification:** Propagates from FakeClient
+(bypasses `call_tool` conversion). Production path safe — `call_tool` converts
+these to `ThreadlinqsSessionError` before `_fetch_bundle` sees them. No
+`_INTEGRATION_ERRORS` expansion needed.
+
+**External blockers (unchanged):**
+1. Redis unavailable — live cache-hit demo blocked.
+2. Playwright version mismatch — frontend e2e blocked.
+3. `predict_mitre_transitions` absent from v7.1.0 registry — EMPTY_FALLBACK.
+
+**Status:** partially-validated (enrichment precedence fix confirmed;
+second-call live behavior uncertain without live verification).

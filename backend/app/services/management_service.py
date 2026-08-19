@@ -534,6 +534,17 @@ def _parse_mcp_result(result: Any) -> Any:
     return result
 
 
+def _is_empty_block(value: Any) -> bool:
+    """True when value is semantically absent (None, empty list/dict/tuple/set, blank string)."""
+    if value is None:
+        return True
+    if isinstance(value, (list, dict, tuple, set)):
+        return len(value) == 0
+    if isinstance(value, str) and not value.strip():
+        return True
+    return False
+
+
 def flatten_bundle(bundle: Mapping[str, Any]) -> dict[str, Any]:
     """Merge a raw API envelope {threat, iocs, ...} into a flat dict.
 
@@ -565,7 +576,7 @@ def flatten_bundle(bundle: Mapping[str, Any]) -> dict[str, Any]:
             "mitre_technique_ids",
             "mitre_tactic_ids",
         ):
-            if key in bundle and key not in flat:
+            if key in bundle and _is_empty_block(flat.get(key)):
                 flat[key] = bundle[key]
         # Canonical sector/region keys (the normalizer reads target_* too, but
         # the canonical flat shape spells them ``sectors``/``regions``).
