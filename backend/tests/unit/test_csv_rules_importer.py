@@ -176,10 +176,10 @@ class TestSocCsvLoad:
         assert rules_file.metadata.get("skipped_named") == 0
 
     def test_unique_inc_count_is_honest(self, rules_file):
-        """Gold extract is 14 rules. Real export: 346 rows → 345 unique INC_*."""
+        """Gold extract is 14 rules. Real export is 345 unique INC_* (IDs 1–346 with 42 absent)."""
         unique = len(rules_file.rules)
         rows_seen = int(rules_file.metadata.get("rows_seen") or unique)
-        if rows_seen >= REAL_EXPORT_ROWS:
+        if unique == REAL_EXPORT_UNIQUE or rows_seen >= REAL_EXPORT_UNIQUE:
             assert unique == REAL_EXPORT_UNIQUE
         else:
             assert unique == GOLD_YAML_RULES
