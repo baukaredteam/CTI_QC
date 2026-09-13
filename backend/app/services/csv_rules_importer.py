@@ -1,8 +1,10 @@
 """CSV → RulesFile importer (same schema as rules_parser).
 
-The SOC export is the completeness source: delimiter ``;``, 346 unique
-rules. Cyrillic header bytes are often corrupted; English column names
-(``Rule``, ``BB``, ``BB2``–``BB5``, ``SYSMON``) stay usable.
+The SOC export is the completeness source: delimiter ``;``, 346 rows /
+345 unique ``INC_*`` names after dropping 1 duplicate. Cyrillic header
+bytes are often corrupted; English column names (``Rule``, ``BB``,
+``BB2``–``BB5``, ``SYSMON``) stay usable. The checked-in fixture is the
+14-rule gold extract until that file is dropped in.
 
 BB chain is taken from Rule / BB / BB2 / BB3 / BB4 / BB5. ``INC_*``
 rule names are mapped to ``BB_*`` for shared-catalog lookup.

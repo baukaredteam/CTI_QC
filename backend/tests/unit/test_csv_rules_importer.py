@@ -6,7 +6,11 @@ Seams:
 - summarize_resolution counts (bb_chain / effective_fallback / missing BB)
 
 The 14-rule YAML remains the schema gold standard (regression).
-The SOC export CSV is the completeness source (346 unique rules).
+
+S1 is NOT done until the real SOC export is dropped in at
+``qradar_soc_export.csv``. That file is 346 rows / 345 unique INC_* names
+after dropping 1 duplicate. This agent never received the attachment.
+Placeholder rows (SOC_Export_Placeholder) are forbidden.
 """
 
 from __future__ import annotations
@@ -24,9 +28,21 @@ REAL_SHARED = FIXTURES / "shared_bbs.yaml"
 SOC_CSV = FIXTURES / "qradar_soc_export.csv"
 SOC_SAMPLE = FIXTURES / "qradar_soc_export.sample.csv"
 
-EXPECTED_UNIQUE_RULES = 346
+# Real SOC export (when dropped in): 346 rows, 1 duplicate → 345 unique INC_*.
+REAL_EXPORT_ROWS = 346
+REAL_EXPORT_UNIQUE = 345
 EXPECTED_SHARED_BBS = 67
 GOLD_YAML_RULES = 14
+PLACEHOLDER_MARK = "SOC_Export_Placeholder"
+
+
+def _assert_no_placeholders(rules) -> None:
+    hits = [
+        f"{r.rule_id}:{r.rule_name}"
+        for r in rules
+        if PLACEHOLDER_MARK in (r.rule_id or "") or PLACEHOLDER_MARK in (r.rule_name or "")
+    ]
+    assert hits == [], "placeholder rows are not the SOC export: %s" % hits
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +119,9 @@ class TestSampleCsvSchema:
     def test_sample_loads_14_gold_rules(self, rules_file):
         assert len(rules_file.rules) == GOLD_YAML_RULES
 
+    def test_sample_has_no_placeholders(self, rules_file):
+        _assert_no_placeholders(rules_file.rules)
+
     def test_sample_rule_ids_match_yaml_gold(self, rules_file):
         assert [r.rule_id for r in rules_file.rules][0] == "INC_0000100"
         assert "INC_0001000" in [r.rule_id for r in rules_file.rules]
@@ -127,11 +146,12 @@ class TestSampleCsvSchema:
 
 
 # ---------------------------------------------------------------------------
-# 4. Full CSV: 346 unique rules, no silent drop
+# 4. Drop-in CSV: no placeholders; 345 unique INC_* only when the real export
+#    is present. Do not claim 346 real rules for the gold extract.
 # ---------------------------------------------------------------------------
 
 @pytest.mark.skipif(not SOC_CSV.exists(), reason="SOC export CSV not present")
-class TestFullCsvLoad:
+class TestSocCsvLoad:
     @pytest.fixture(scope="class")
     @classmethod
     def rules_file(cls):
@@ -139,16 +159,30 @@ class TestFullCsvLoad:
 
         return parse_rules_csv(SOC_CSV)
 
-    def test_csv_load_count_is_346(self, rules_file):
-        assert len(rules_file.rules) == EXPECTED_UNIQUE_RULES
+    def test_fixture_file_contains_no_placeholder_text(self):
+        text = SOC_CSV.read_text(encoding="utf-8")
+        assert PLACEHOLDER_MARK not in text
+
+    def test_no_placeholder_rule_names(self, rules_file):
+        _assert_no_placeholders(rules_file.rules)
+
+    def test_every_rule_is_an_inc_name(self, rules_file):
+        for rule in rules_file.rules:
+            assert rule.rule_id.startswith("INC_"), rule.rule_id
 
     def test_rule_ids_are_unique(self, rules_file):
         ids = [r.rule_id for r in rules_file.rules]
-        assert len(ids) == len(set(ids)) == EXPECTED_UNIQUE_RULES
-
-    def test_no_silent_skip_of_named_rows(self, rules_file):
-        assert rules_file.metadata.get("unique_rules") == EXPECTED_UNIQUE_RULES
+        assert len(ids) == len(set(ids))
         assert rules_file.metadata.get("skipped_named") == 0
+
+    def test_unique_inc_count_is_honest(self, rules_file):
+        """Gold extract is 14 rules. Real export: 346 rows → 345 unique INC_*."""
+        unique = len(rules_file.rules)
+        rows_seen = int(rules_file.metadata.get("rows_seen") or unique)
+        if rows_seen >= REAL_EXPORT_ROWS:
+            assert unique == REAL_EXPORT_UNIQUE
+        else:
+            assert unique == GOLD_YAML_RULES
 
 
 # ---------------------------------------------------------------------------
@@ -162,7 +196,7 @@ class TestFullCsvLoad:
 class TestCsvResolutionReport:
     @pytest.fixture(scope="class")
     @classmethod
-    def summary(cls):
+    def loaded(cls):
         from app.services.bb_resolver import (
             load_shared_bbs,
             resolve_all_rules,
@@ -173,24 +207,24 @@ class TestCsvResolutionReport:
         rf = parse_rules_csv(SOC_CSV)
         shared = load_shared_bbs(REAL_SHARED)
         results = resolve_all_rules(rf, shared)
-        return summarize_resolution(results), results
+        return summarize_resolution(results), results, rf
 
-    def test_every_csv_rule_is_in_the_report(self, summary):
-        report, results = summary
-        assert report.total_rules == EXPECTED_UNIQUE_RULES
-        assert len(results) == EXPECTED_UNIQUE_RULES
+    def test_every_csv_rule_is_in_the_report(self, loaded):
+        report, results, rf = loaded
+        _assert_no_placeholders(rf.rules)
+        assert report.total_rules == len(rf.rules)
+        assert len(results) == len(rf.rules)
 
-    def test_report_has_bb_chain_fallback_and_missing_counts(self, summary):
-        report, _results = summary
+    def test_report_has_bb_chain_fallback_and_missing_counts(self, loaded):
+        report, _results, rf = loaded
         assert report.bb_chain >= 1
         assert report.effective_fallback >= 0
-        assert report.bb_chain + report.effective_fallback + report.errors == EXPECTED_UNIQUE_RULES
-        # Missing BB is a counted field, never a silent skip
+        assert report.bb_chain + report.effective_fallback + report.errors == len(rf.rules)
         assert report.rules_with_missing_bb >= 0
         assert report.missing_bb_count == len(report.missing_bb_ids)
 
-    def test_missing_bb_ids_are_listed_when_present(self, summary):
-        report, results = summary
+    def test_missing_bb_ids_are_listed_when_present(self, loaded):
+        report, results, _rf = loaded
         if report.rules_with_missing_bb:
             assert report.missing_bb_ids
             warned = [
@@ -200,10 +234,10 @@ class TestCsvResolutionReport:
             ]
             assert len(warned) == report.rules_with_missing_bb
 
-    def test_print_report_includes_counts(self, summary, capsys):
+    def test_print_report_includes_counts(self, loaded, capsys):
         from app.services.bb_resolver import print_resolution_report
 
-        _report, results = summary
+        _report, results, _rf = loaded
         print_resolution_report(results)
         out = capsys.readouterr().out
         assert "BB Resolution Report" in out
@@ -220,8 +254,6 @@ class TestCsvFormatFacts:
     def test_semicolon_delimiter_and_garbled_header(self, tmp_path):
         from app.services.csv_rules_importer import parse_rules_csv
 
-        # Cyrillic header bytes decoded as the wrong codec → mojibake,
-        # but English Rule/BB/SYSMON names stay usable.
         path = tmp_path / "garbled.csv"
         path.write_text(
             "ID;\ufffd\ufffd\ufffd;log source;enabled;created;modified;category;criticality;Rule;BB;BB2;BB3;BB4;BB5;SYSMON\n"
@@ -250,3 +282,18 @@ class TestCsvFormatFacts:
         rf = parse_rules_csv(path)
         assert len(rf.rules) == 1
         assert rf.metadata.get("duplicates") == 1
+
+    def test_placeholder_row_is_rejected_by_guard(self, tmp_path):
+        from app.services.csv_rules_importer import parse_rules_csv
+
+        path = tmp_path / "fake.csv"
+        path.write_text(
+            "ID;Rules in Qradar;log source;enabled;created;modified;category;criticality;Rule;BB;BB2;BB3;BB4;BB5;SYSMON\n"
+            "1;SOC_Export_Placeholder_001_Windows;Microsoft Windows Security Event Log;true;"
+            "2020-09-24;2023-03-30;;Medium;"
+            "INC_0100001_common:SOC_Export_Placeholder_001_Windows;;;;;;no\n",
+            encoding="utf-8",
+        )
+        rf = parse_rules_csv(path)
+        with pytest.raises(AssertionError, match="placeholder"):
+            _assert_no_placeholders(rf.rules)

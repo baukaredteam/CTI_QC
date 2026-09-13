@@ -1,4 +1,7 @@
-"""Load the 346-rule SOC CSV + shared BB catalog and print the resolution report.
+"""Load qradar_soc_export.csv + shared BB catalog and print the resolution report.
+
+Until the real SOC export is dropped in, this file is the 14-rule gold extract.
+The real export is 346 rows / 345 unique INC_* after dropping 1 duplicate.
 
 Run from backend/ with PYTHONPATH=.:
     python scripts/smoke_csv_rulebook.py

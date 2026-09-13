@@ -45,9 +45,11 @@ rule copying.
   hypothesis:view list / hypothesis:validate PATCH), Hypotheses OpenAPI tag.
   Backend suite green: 915 passed, 11 skipped; ruff clean. e2e still mocks the
   hypotheses endpoints until a live scan run seeds fixtures/hypotheses.json.
-- S1 / MAR-15: CSV→RulesFile importer (`csv_rules_importer.parse_rules_csv`) +
-  `summarize_resolution` (bb_chain / effective_fallback / missing BB counts).
-  Additive-only; scan_feed / live Threadlinqs untouched.
+- S1 / MAR-15 importer exists (`csv_rules_importer.parse_rules_csv` +
+  `summarize_resolution`) but is **not done**: the real SOC export CSV was not
+  attached to this agent. Fixture is the 14 gold `INC_*` rows only. Tests fail
+  if any `SOC_Export_Placeholder` row appears. Additive-only; scan_feed
+  untouched.
 
 ## Key decisions (do not re-litigate)
 - availability comes from rule.custom_fields, not a fields.yaml join (names differ).
@@ -58,10 +60,11 @@ rule copying.
   qradar_domain_id for DOMAINNAME(domainid) scoping; START/STOP for retro-hunt, LAST for
   detection.
 - Rulebook fixtures: `full_rules85.yaml` is the 14-rule schema gold (header may say
-  346/~85). Completeness source is `backend/fixtures/qradar_soc_export.csv` (346
-  unique rules, `;`). `shared_bbs.yaml` has 67 shared BBs (header may say 85).
-  Missing BB is a counted report, not a silent skip. Drop the real SOC export over
-  the CSV path — see `backend/fixtures/README.md`.
+  346/~85). `qradar_soc_export.csv` is that same 14-row gold extract, not the
+  full SOC book. The real export (346 rows / 345 unique `INC_*` after one
+  duplicate) still has to be dropped in — see `backend/fixtures/README.md`.
+  `shared_bbs.yaml` has 67 shared BBs (header may say 85). Missing BB is a
+  counted report, not a silent skip.
 - PostgreSQL deferred to M5; pgvector planned for memory (M9). Attack Simulation out of
   scope.
 
@@ -77,8 +80,9 @@ rule copying.
 - pySigma imports as "from sigma... import", never "import pysigma".
 - Windows cp1252 console may render em dashes as garbage; cosmetic only.
 - Fixtures: backend/fixtures/full_rules85.yaml (14-rule schema gold),
-  qradar_soc_export.csv (346 unique rules), qradar_soc_export.sample.csv (14-row
-  sample), fields.yaml, shared_bbs.yaml (67 shared BBs).
+  qradar_soc_export.csv (14 gold INC_* rows until the real SOC export is
+  dropped in), qradar_soc_export.sample.csv (same 14), fields.yaml,
+  shared_bbs.yaml (67 shared BBs).
 - rag.py f-string backslash SyntaxError was fixed by hoisting re.sub; the single
   additive-only exception, recorded in CHANGE_PLAN.
 
@@ -96,9 +100,12 @@ rule copying.
    land in fixtures/hypotheses.json.
 2. Point frontend /hypotheses at the real endpoints (drop the e2e mock) after a
    seed scan; re-run hypotheses e2e against the live backend shape.
-3. After the demo: M5 (PostgreSQL tenants, rulebook, hypothesis rows — replace
+3. S1 / MAR-15 still blocked: drop the real SOC export over
+   `backend/fixtures/qradar_soc_export.csv` (346 rows / 345 unique INC_*;
+   zero placeholder rows). Then re-run importer tests.
+4. After the demo: M5 (PostgreSQL tenants, rulebook, hypothesis rows — replace
    the in-memory store seam), M7/M8 agents and skills registry, M9 memory and
-   HITL. Full rulebook import is done (S1 / MAR-15).
+   HITL.
 
 ## Open questions for the grill
 - LLM booster for hypotheses remains deferred (deterministic templates are the
