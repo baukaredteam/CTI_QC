@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import logging
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -102,7 +103,9 @@ def _build_combined_lookup(
     # Start with shared
     lookup: dict[str, dict[str, Any]] = dict(shared_bbs)
 
-    # Overlay inline BBs (they win over shared)
+    # Overlay inline BBs (they win over shared when they carry conditions).
+    # CSV rows only have BB names — empty inline must not wipe shared own_conditions,
+    # and an unknown empty pointer must stay out of the lookup so walk reports missing.
     for bb in rule.building_blocks:
         bb_dict = bb.model_dump()
         norm_id = _normalize_bb_id(bb.bb_id)
@@ -116,6 +119,21 @@ def _build_combined_lookup(
                 message="Inline BB ID normalized: '%s' → '%s'" % (bb.bb_id, norm_id),
             ))
 
+        empty = _is_empty_conditions(bb_dict.get("own_conditions", "") or "")
+        deps = list(bb_dict.get("depends_on_bb") or [])
+        if empty and norm_id in lookup:
+            shared = lookup[norm_id]
+            merged_deps = list(shared.get("depends_on_bb") or [])
+            for dep in deps:
+                if dep not in merged_deps:
+                    merged_deps.append(dep)
+            merged = dict(shared)
+            merged["depends_on_bb"] = merged_deps
+            lookup[norm_id] = merged
+            continue
+        if empty and not deps and norm_id not in lookup:
+            # CSV name-only pointer: leave it out so walk reports missing BB.
+            continue
         lookup[norm_id] = bb_dict
 
     return lookup, warnings
@@ -321,31 +339,60 @@ def resolve_all_rules(
     return results
 
 
+@dataclass(frozen=True)
+class ResolutionSummary:
+    """Counted BB-resolution outcomes — missing BB is never a silent skip."""
+
+    total_rules: int
+    bb_chain: int
+    effective_fallback: int
+    errors: int
+    rules_with_missing_bb: int
+    missing_bb_count: int
+    missing_bb_ids: tuple[str, ...]
+    corrupted_ids_normalized: int
+
+
+def summarize_resolution(results: list[ResolvedDetection]) -> ResolutionSummary:
+    """Count bb_chain / effective_fallback / missing BB across resolved rules."""
+    dangling: list[str] = []
+    seen: set[str] = set()
+    for result in results:
+        for warning in result.warnings:
+            if warning.warning_type != "missing_building_block":
+                continue
+            if warning.bb_id in seen:
+                continue
+            seen.add(warning.bb_id)
+            dangling.append(warning.bb_id)
+    return ResolutionSummary(
+        total_rules=len(results),
+        bb_chain=sum(1 for r in results if r.logic_source == "bb_chain"),
+        effective_fallback=sum(1 for r in results if r.logic_source == "effective_fallback"),
+        errors=sum(1 for r in results if r.logic_source == "error"),
+        rules_with_missing_bb=sum(
+            1 for r in results
+            if any(w.warning_type == "missing_building_block" for w in r.warnings)
+        ),
+        missing_bb_count=len(dangling),
+        missing_bb_ids=tuple(sorted(dangling)),
+        corrupted_ids_normalized=sum(
+            sum(1 for w in r.warnings if w.warning_type == "corrupted_id_normalized")
+            for r in results
+        ),
+    )
+
+
 def print_resolution_report(results: list[ResolvedDetection]) -> None:
     """Print a human-readable report of BB resolution results."""
-    total = len(results)
-    fully_resolved = sum(1 for r in results if r.logic_source == "bb_chain")
-    fallback = sum(1 for r in results if r.logic_source == "effective_fallback")
-    errors = sum(1 for r in results if r.logic_source == "error")
-
-    # Count rules with at least one MissingBuildingBlock warning
-    rules_with_missing = sum(
-        1 for r in results
-        if any(w.warning_type == "missing_building_block" for w in r.warnings)
-    )
-
-    # Count corrupted-id normalizations
-    corrupted_normalized = sum(
-        sum(1 for w in r.warnings if w.warning_type == "corrupted_id_normalized")
-        for r in results
-    )
-
-    # Collect all dangling BB IDs
-    dangling_ids: set[str] = set()
-    for r in results:
-        for w in r.warnings:
-            if w.warning_type == "missing_building_block":
-                dangling_ids.add(w.bb_id)
+    summary = summarize_resolution(results)
+    total = summary.total_rules
+    fully_resolved = summary.bb_chain
+    fallback = summary.effective_fallback
+    errors = summary.errors
+    rules_with_missing = summary.rules_with_missing_bb
+    corrupted_normalized = summary.corrupted_ids_normalized
+    dangling_ids = set(summary.missing_bb_ids)
 
     print("=== BB Resolution Report ===")
     print("  Total rules              : %d" % total)
